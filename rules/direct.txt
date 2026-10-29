@@ -78,3 +78,21 @@ DOMAIN-SUFFIX,12306.cn
 DOMAIN,ad.12306.cn
 DOMAIN,sdkapp.uve.weibo.com
 DOMAIN-SUFFIX,ddgksf2013.top
+
+# 比亚迪 (BYD) 车联、车机与云服务直连
+DOMAIN-SUFFIX,byd.com
+DOMAIN-SUFFIX,byd.com.cn
+DOMAIN-SUFFIX,bydauto.com
+DOMAIN-SUFFIX,bydauto.com.cn
+DOMAIN-SUFFIX,bydcloud.com
+DOMAIN-SUFFIX,byd-auto.net
+DOMAIN-SUFFIX,bydclub.com
+DOMAIN-SUFFIX,bydcare.com
+DOMAIN-SUFFIX,bydsemi.com
+DOMAIN-SUFFIX,bydit.com
+DOMAIN-SUFFIX,bydonline.com
+DOMAIN-SUFFIX,bydowstar.com
+DOMAIN-SUFFIX,bydenergy.com
+DOMAIN-SUFFIX,bydservice.com
+DOMAIN-SUFFIX,bydservice.com.cn
+
