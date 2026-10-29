@@ -11,8 +11,10 @@ meta:
 router:
   # 每周日 04:10 自动同步（cron 语法，5 段）
   cron: "10 4 * * 0"
-  # chnroute / gfwlist 上游数据刷新周期（天），编译时超过该天数会重新拉取
+  # chnroute / gfwlist / cdn 上游数据刷新周期（天），编译时超过该天数会重新拉取
   data_refresh_days: 7
+  # 是否同步 cdn.txt（国内 CDN 域名，约 11 万条）。若路由器 DNS 变慢可置为 false
+  update_cdn: true
 
 # 1. 核心业务策略组定义（全端统一收敛至 6 个黄金策略组）
 policies:
@@ -188,8 +190,8 @@ rewrites:
     filename: "StartUpAds.conf"
     upstream_url: "https://ddgksf2013.top/rewrite/StartUpAds.conf"
     opt_parser: false
-    enabled: false
-    desc: "已停用：ddgksf2013.top 对该路径返回 302 跳首页，源文件已下架"
+    enabled: true
+    desc: "全网主流应用开屏广告拦截（源站按 UA 放行，已适配 Quantumult UA 抓取）"
 
   - id: "youtube_ads"
     name: "油管去广告@Maasea"
@@ -309,8 +311,8 @@ rewrites:
     filename: "missav.ads.js"
     upstream_url: "https://ddgksf2013.top/scripts/missav.ads.js"
     opt_parser: true
-    enabled: false
-    desc: "已停用：ddgksf2013.top 对该路径返回 302 跳首页，源脚本已下架"
+    enabled: true
+    desc: "MissAV 网页去广告与播放增强（源站按 UA 放行，已适配 Quantumult UA 抓取）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   - id: "caiyun_ads"
