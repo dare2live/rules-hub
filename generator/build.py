@@ -30,6 +30,7 @@ SURGE_DIST = DIST_DIR / "surge"
 QX_DIST = DIST_DIR / "qx"
 ROCKET_DIST = DIST_DIR / "shadowrocket"
 ROUTER_DIST = DIST_DIR / "router"
+FANCYSS_DIST = ROUTER_DIST / "fancyss"
 WEB_DIST = DIST_DIR / "web"
 REWRITES_CACHE_DIR = BASE_DIR / "rewrites" / "cached"
 
@@ -43,6 +44,7 @@ REQUIRED_QX_SECTIONS = [
 # 上游数据源（用于软路由规则，7 天刷新一次并落地缓存）
 CHNROUTE_URL = "https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt"
 GFWLIST_URL = "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt"
+CDN_URL = "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
 DATA_MAX_AGE = 7 * 86400
 
 
@@ -84,12 +86,15 @@ def fetch_upstream(url, timeout=8):
         return []
 
 
-def fetch_raw(url, timeout=12):
+REWRITE_UA = "Quantumult X/1.4.2 (iPhone; iOS 18.0)"
+
+
+def fetch_raw(url, timeout=12, ua=None):
     """Fetch raw text without stripping comments/blank lines (safe for JS & data files)."""
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"}
+            headers={"User-Agent": ua or "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"}
         )
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return response.read().decode("utf-8", errors="ignore")
@@ -193,6 +198,21 @@ def parse_gfwlist_domains(text):
         if re.match(r"^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$", s):
             domains.append(s)
     return sorted(set(domains))
+
+
+def parse_china_domains(text):
+    """Extract domains from felixonmars dnsmasq-china-list (server=/domain/114.114.114.114)."""
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        m = re.match(r"^server=/([^/]+)/", s)
+        if m:
+            d = m.group(1).lower()
+            if re.match(r"^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$", d):
+                out.append(d)
+    return sorted(set(out))
 
 
 def normalize_rule(line):
@@ -611,7 +631,7 @@ def build_rewrites(config):
                 pass
 
         if need_fetch:
-            raw_text = fetch_raw(url, timeout=8)
+            raw_text = fetch_raw(url, timeout=8, ua=REWRITE_UA)
             if raw_text and valid_rewrite_payload(raw_text):
                 content = raw_text
                 write_text(cache_file, content)
@@ -831,8 +851,8 @@ def generate_personal_qx_config(config, produced=None):
 ROUTER_SYNC_SH = r'''#!/bin/sh
 # ===== Rules Hub - fancyss 规则订阅同步 =====
 # 由 rules-hub 自动生成，请勿手工修改
-# 数据源: __BASE__/router
-BASE="__BASE__/router"
+# 订阅源: __BASE__/router/fancyss
+BASE="__BASE__/router/fancyss"
 RULES="/koolshare/ss/rules"
 TMP="/tmp/ruleshub_sync"
 LOG="/tmp/ruleshub_sync.log"
@@ -843,10 +863,9 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; echo "$*"; }
 mkdir -p "$TMP"
 
 fetch() {
-  _url="$1"; _out="$2"
-  wget --no-check-certificate --timeout=25 -qO "$_out" "$_url" || return 1
-  [ -s "$_out" ] || return 1
-  head -c 300 "$_out" | grep -qi "<html\|<!doctype" && return 1
+  wget --no-check-certificate --timeout=30 -qO "$2" "$1" || return 1
+  [ -s "$2" ] || return 1
+  head -c 300 "$2" | grep -qi "<html\|<!doctype" && return 1
   return 0
 }
 
@@ -854,37 +873,42 @@ same() { [ "$(md5sum "$1" | awk '{print $1}')" = "$(md5sum "$2" | awk '{print $1
 
 changed=0
 
-if fetch "$BASE/chnroute.txt" "$TMP/chnroute.txt"; then
-  n=$(grep -c . "$TMP/chnroute.txt")
-  if [ "$n" -lt 1000 ]; then
-    log "chnroute.txt 条目异常($n)，放弃覆盖"
-  elif [ -f "$RULES/chnroute.txt" ] && same "$TMP/chnroute.txt" "$RULES/chnroute.txt"; then
-    log "chnroute.txt 已是最新 ($n 条)"
-  else
-    cp -f "$RULES/chnroute.txt" "$RULES/chnroute.txt.bak" 2>/dev/null
-    mv -f "$TMP/chnroute.txt" "$RULES/chnroute.txt"
-    log "chnroute.txt 已更新 ($n 条)"
-    changed=1
-  fi
-else
-  log "chnroute.txt 下载失败，保留原文件"
-fi
+fetch "$BASE/version1" "$TMP/version1" || log "version1 下载失败（仅影响版本号显示）"
 
-if fetch "$BASE/gfwlist.conf" "$TMP/gfwlist.conf"; then
-  n=$(grep -c "ipset" "$TMP/gfwlist.conf")
-  if [ "$n" -lt 100 ]; then
-    log "gfwlist.conf 条目异常($n)，放弃覆盖"
-  elif [ -f "$RULES/gfwlist.conf" ] && same "$TMP/gfwlist.conf" "$RULES/gfwlist.conf"; then
-    log "gfwlist.conf 已是最新 ($n 条)"
-  else
-    cp -f "$RULES/gfwlist.conf" "$RULES/gfwlist.conf.bak" 2>/dev/null
-    mv -f "$TMP/gfwlist.conf" "$RULES/gfwlist.conf"
-    log "gfwlist.conf 已更新 ($n 条)"
-    changed=1
+apply() {
+  _name="$1"; _min="$2"; _max="$3"; _vline="$4"
+  if ! fetch "$BASE/$_name" "$TMP/$_name"; then
+    log "$_name 下载失败，保留原文件"
+    return
   fi
-else
-  log "gfwlist.conf 下载失败，保留原文件"
-fi
+  _n=$(grep -c . "$TMP/$_name")
+  if [ "$_n" -lt "$_min" ]; then
+    log "$_name 条目过少($_n < $_min)，放弃覆盖"
+    return
+  fi
+  if [ "$_n" -gt "$_max" ]; then
+    log "$_name 条目异常偏多($_n > $_max)，放弃覆盖"
+    return
+  fi
+  if [ -f "$RULES/$_name" ] && same "$TMP/$_name" "$RULES/$_name"; then
+    log "$_name 已是最新 ($_n 条)"
+    return
+  fi
+  cp -f "$RULES/$_name" "$RULES/$_name.bak" 2>/dev/null
+  mv -f "$TMP/$_name" "$RULES/$_name"
+  log "$_name 已更新 ($_n 条)"
+  if [ -s "$TMP/version1" ]; then
+    _v=$(sed -n "${_vline}p" "$TMP/version1")
+    if [ -n "$_v" ] && [ -f "$RULES/version" ]; then
+      sed -i "${_vline}s|.*|$_v|" "$RULES/version"
+    fi
+  fi
+  changed=1
+}
+
+apply chnroute.txt 1000 20000 2
+apply gfwlist.conf 500 40000 1
+__CDN_APPLY__
 
 rm -rf "$TMP"
 
@@ -892,7 +916,26 @@ if [ "$changed" = "1" ]; then
   log "规则已变更，重启 shadowsocks 生效..."
   dbus set ss_basic_action=1 2>/dev/null
   sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
-  log "重启完成"
+
+  # 健康检查：dnsmasq 起不来就回滚，避免规则文件拖垮整网 DNS
+  i=0
+  while [ "$i" -lt 10 ]; do
+    pidof dnsmasq >/dev/null 2>&1 && break
+    i=$((i + 1))
+    sleep 2
+  done
+  if ! pidof dnsmasq >/dev/null 2>&1; then
+    log "dnsmasq 未运行，回滚到上一版规则..."
+    for _f in chnroute.txt gfwlist.conf cdn.txt; do
+      if [ -f "$RULES/$_f.bak" ]; then
+        cp -f "$RULES/$_f.bak" "$RULES/$_f"
+      fi
+    done
+    sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
+    log "已回滚并重启，请检查 /tmp/ruleshub_sync.log"
+  else
+    log "重启完成，dnsmasq 正常"
+  fi
 else
   log "无变更，跳过重启"
 fi
@@ -906,32 +949,33 @@ BASE="__BASE__/router"
 DIR="/koolshare/scripts"
 RULES="/koolshare/ss/rules"
 CRON_LINE="__CRON__"
+CRU="/usr/sbin/cru"
 
 echo "== Rules Hub 软路由规则订阅安装 =="
 [ -d "$RULES" ] || { echo "未检测到 fancyss ($RULES)，请先安装插件"; exit 1; }
 [ -d "$DIR" ] || DIR="/jffs/scripts"
 [ -d "$DIR" ] || { echo "未找到可写脚本目录"; exit 1; }
 
-wget --no-check-certificate --timeout=25 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
+wget --no-check-certificate --timeout=30 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
 grep -qi "<html" /tmp/ss_rule_sync.sh && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
 mv -f /tmp/ss_rule_sync.sh "$DIR/ss_rule_sync.sh"
 chmod +x "$DIR/ss_rule_sync.sh"
 echo "已安装: $DIR/ss_rule_sync.sh"
 
-if [ -f "$RULES/chnroute.txt" ] && [ ! -f "$RULES/chnroute.txt.orig" ]; then
-  cp -f "$RULES/chnroute.txt" "$RULES/chnroute.txt.orig"
-fi
-if [ -f "$RULES/gfwlist.conf" ] && [ ! -f "$RULES/gfwlist.conf.orig" ]; then
-  cp -f "$RULES/gfwlist.conf" "$RULES/gfwlist.conf.orig"
-fi
+for f in chnroute.txt gfwlist.conf cdn.txt version; do
+  if [ -f "$RULES/$f" ] && [ ! -f "$RULES/$f.orig" ]; then
+    cp -f "$RULES/$f" "$RULES/$f.orig"
+  fi
+done
+echo "已备份原始规则为 *.orig"
 
-if command -v cru >/dev/null 2>&1; then
-  cru d ruleshub_sync 2>/dev/null
-  cru a ruleshub_sync "$CRON_LINE $DIR/ss_rule_sync.sh"
+[ -x "$CRU" ] || CRU=$(which cru 2>/dev/null)
+if [ -n "$CRU" ] && [ -x "$CRU" ]; then
+  "$CRU" d ruleshub_sync 2>/dev/null
+  "$CRU" a ruleshub_sync "$CRON_LINE $DIR/ss_rule_sync.sh"
   echo "已设置定时任务: 每周日 04:10 自动同步"
 else
-  echo "警告: 未找到 cru，请手动在路由器计划任务中添加:"
-  echo "  $CRON_LINE $DIR/ss_rule_sync.sh"
+  echo "警告: 未找到 cru，请手动添加计划任务: $CRON_LINE $DIR/ss_rule_sync.sh"
 fi
 
 START="/jffs/scripts/services-start"
@@ -939,7 +983,7 @@ if [ -d /jffs/scripts ]; then
   touch "$START"
   chmod +x "$START"
   if ! grep -q "ruleshub_sync" "$START"; then
-    echo "cru a ruleshub_sync \"$CRON_LINE $DIR/ss_rule_sync.sh\"" >> "$START"
+    echo "$CRU a ruleshub_sync \"$CRON_LINE $DIR/ss_rule_sync.sh\"" >> "$START"
   fi
   echo "已写入开机自启: $START"
 fi
@@ -949,9 +993,17 @@ echo "== 立即执行一次同步 =="
 '''
 
 
+def md5_file(path):
+    try:
+        return hashlib.md5(Path(path).read_bytes()).hexdigest()
+    except Exception:
+        return "0" * 32
+
+
 def build_router(config, rule_data):
-    """Generate router rule files + a self-hosted subscription with weekly auto-update."""
+    """Generate router rule files + a self-hosted fancyss subscription with weekly auto-update."""
     ROUTER_DIST.mkdir(parents=True, exist_ok=True)
+    FANCYSS_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
 
     # 1. Custom Whitelist (Always DIRECT on router)
@@ -967,18 +1019,17 @@ def build_router(config, rule_data):
                 proxy_lines.extend(rule_data[rel_path])
     blacklist_domains = extract_domains_for_router(proxy_lines)
 
-    with open(ROUTER_DIST / "merlin_whitelist.txt", "w", encoding="utf-8") as f:
-        f.write("# 华硕梅林软路由 SS 插件自定义白名单域名 (直接复制到插件白名单中)\n")
-        f.write("\n".join(whitelist_domains) + "\n")
-
-    with open(ROUTER_DIST / "merlin_blacklist.txt", "w", encoding="utf-8") as f:
-        f.write("# 华硕梅林软路由 SS 插件自定义黑名单域名 (强制走代理)\n")
-        f.write("\n".join(blacklist_domains) + "\n")
+    write_text(ROUTER_DIST / "merlin_whitelist.txt",
+               "# 华硕梅林软路由 SS 插件自定义白名单域名 (直接复制到插件白名单中)\n"
+               + "\n".join(whitelist_domains) + "\n")
+    write_text(ROUTER_DIST / "merlin_blacklist.txt",
+               "# 华硕梅林软路由 SS 插件自定义黑名单域名 (强制走代理)\n"
+               + "\n".join(blacklist_domains) + "\n")
 
     # 3. Fresh China CIDR list (replaces the 2015-era chnroute.txt on the router)
     chnroute = load_cached_data(DATA_DIR / "chnroute.txt", CHNROUTE_URL,
                                 parse_cidr_list, 1000, "chnroute")
-    write_text(ROUTER_DIST / "chnroute.txt", "\n".join(chnroute) + "\n")
+    write_text(FANCYSS_DIST / "chnroute.txt", "\n".join(chnroute) + "\n")
 
     # 4. Fresh dnsmasq gfwlist (fancyss format) = upstream gfwlist + our proxy domains - whitelist
     gfw = load_cached_data(DATA_DIR / "gfwlist.txt", GFWLIST_URL,
@@ -988,26 +1039,51 @@ def build_router(config, rule_data):
     for d in merged:
         gfw_lines.append(f"server=/.{d}/127.0.0.1#7913")
         gfw_lines.append(f"ipset=/.{d}/gfwlist")
-    write_text(ROUTER_DIST / "gfwlist.conf", "\n".join(gfw_lines) + "\n")
+    write_text(FANCYSS_DIST / "gfwlist.conf", "\n".join(gfw_lines) + "\n")
 
-    # 5. Subscription scripts
+    # 5. Fresh China CDN domain list (used by fancyss for CDN-optimised DNS)
+    cdn = load_cached_data(DATA_DIR / "cdn_domains.txt", CDN_URL,
+                           parse_china_domains, 10000, "cdn")
+    if len(cdn) > 160000:
+        cdn = cdn[:160000]
+    write_text(FANCYSS_DIST / "cdn.txt", "\n".join(cdn) + "\n")
+
+    # 6. version1 (fancyss native update manifest: <date> # <md5> <name>)
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone(timedelta(hours=8)))
+    today = now.strftime("%Y-%m-%d")
+    version_lines = [
+        f"{today} # {md5_file(FANCYSS_DIST / 'gfwlist.conf')} gfwlist",
+        f"{today} # {md5_file(FANCYSS_DIST / 'chnroute.txt')} chnroute",
+        "2016-02-26 # 7c8569e96bc6893a146d5e093a3b0434 adblock",
+        f"{today} # {md5_file(FANCYSS_DIST / 'cdn.txt')} cdn",
+    ]
+    write_text(FANCYSS_DIST / "version1", "\n".join(version_lines) + "\n")
+
+    # 7. Subscription scripts
     router_cfg = config.get("router", {}) or {}
     cron_line = router_cfg.get("cron", "10 4 * * 0")
+    cdn_apply = ("apply cdn.txt 10000 160000 4"
+                 if router_cfg.get("update_cdn", True)
+                 else "# cdn.txt 更新已关闭（config.yaml: router.update_cdn）")
     write_text(ROUTER_DIST / "ss_rule_sync.sh",
-               ROUTER_SYNC_SH.replace("__BASE__", base_url).replace("__CRON__", cron_line))
+               ROUTER_SYNC_SH.replace("__BASE__", base_url)
+                             .replace("__CRON__", cron_line)
+                             .replace("__CDN_APPLY__", cdn_apply))
     write_text(ROUTER_DIST / "install.sh",
                ROUTER_INSTALL_SH.replace("__BASE__", base_url).replace("__CRON__", cron_line))
 
-    # 6. Human-readable manifest
-    from datetime import datetime, timezone, timedelta
-    gen_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+    # 8. Human-readable manifest
+    gen_time = now.strftime("%Y-%m-%d %H:%M:%S")
     manifest = [
         "Rules Hub - 软路由规则订阅",
         f"生成时间: {gen_time} (北京时间)",
-        f"订阅根地址: {base_url}/router",
+        f"订阅根地址: {base_url}/router/fancyss",
         "",
-        f"chnroute.txt      中国 IP 段 {len(chnroute)} 条（覆盖 2015 年老版本 5777 条）",
-        f"gfwlist.conf      代理域名 {len(merged)} 条（fancyss dnsmasq 格式）",
+        f"chnroute.txt      中国 IP 段 {len(chnroute)} 条（旧版 2015-08-01，5777 条）",
+        f"gfwlist.conf      代理域名 {len(merged)} 条（旧版 2015-08-01，11166 行）",
+        f"cdn.txt           国内 CDN 域名 {len(cdn)} 条（旧版 2015-08-01，73483 行）",
+        f"version1          fancyss 原生更新清单",
         f"merlin_blacklist.txt  强制代理域名 {len(blacklist_domains)} 条",
         f"merlin_whitelist.txt  强制直连域名 {len(whitelist_domains)} 条",
         "",
@@ -1015,12 +1091,19 @@ def build_router(config, rule_data):
         f"  wget -qO- {base_url}/router/install.sh | sh",
         "",
         "安装后行为:",
-        "  - 立即同步一次",
+        "  - 立即同步一次（chnroute / gfwlist / cdn 三个文件）",
         "  - 每周日 04:10 自动同步（cru 定时任务，开机自动恢复）",
         "  - 自动备份原文件为 *.orig / *.bak，可随时回滚",
+        "  - 条目数异常、下载到 HTML、md5 未变化时都不会覆盖",
+        "",
+        "回滚:",
+        "  cp /koolshare/ss/rules/chnroute.txt.orig /koolshare/ss/rules/chnroute.txt",
+        "  cp /koolshare/ss/rules/gfwlist.conf.orig /koolshare/ss/rules/gfwlist.conf",
+        "  cp /koolshare/ss/rules/cdn.txt.orig /koolshare/ss/rules/cdn.txt",
+        "  sh /koolshare/ss/ssconfig.sh restart",
     ]
     write_text(ROUTER_DIST / "README.txt", "\n".join(manifest) + "\n")
-    print(f"   ✅ [Router] chnroute {len(chnroute)} 条 / gfwlist {len(merged)} 条 / 订阅脚本已生成")
+    print(f"   ✅ [Router] chnroute {len(chnroute)} / gfwlist {len(merged)} / cdn {len(cdn)} / 订阅脚本已生成")
 
 
 def build_shadowrocket(config, rule_data):
