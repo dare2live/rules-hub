@@ -45,6 +45,14 @@ jobs:
         run: |
           cp dist/web/index.html dist/index.html
 
+      - name: Commit fresh cached files (if on schedule)
+        if: github.event_name == 'schedule'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rewrites/cached/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(auto): daily upstream rewrites sync [skip ci]" && git push)
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

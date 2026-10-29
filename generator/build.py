@@ -11,6 +11,7 @@ Generates:
 
 import os
 import sys
+import re
 import yaml
 import urllib.request
 import urllib.error
@@ -26,6 +27,7 @@ QX_DIST = DIST_DIR / "qx"
 ROCKET_DIST = DIST_DIR / "shadowrocket"
 ROUTER_DIST = DIST_DIR / "router"
 WEB_DIST = DIST_DIR / "web"
+REWRITES_CACHE_DIR = BASE_DIR / "rewrites" / "cached"
 
 
 def load_config():
@@ -96,26 +98,41 @@ def extract_domain(rule_line):
     return None
 
 
-def to_qx_rule(line):
-    """Translate Surge rule line to Quantumult X syntax."""
+def get_qx_tag(rule_id):
+    tag_map = {
+        "unbreak": "规则修正",
+        "custom_direct": "个人直连",
+        "claude": "Claude",
+        "google_ai": "GoogleAI",
+        "workbuddy": "WorkBuddy",
+        "media": "国际媒体",
+        "openai": "OpenAI",
+        "tiktok": "TikTok",
+        "proxy": "全球加速",
+        "reject": "广告拦截",
+    }
+    return tag_map.get(rule_id, rule_id)
+
+
+def to_qx_rule(line, target=None):
+    """Translate Surge rule line to Quantumult X syntax with optional policy assignment."""
     parts = [p.strip() for p in line.split(",")]
     if not parts:
         return None
     rule_type = parts[0].upper()
+    suffix = f",{target}" if target else ""
     
     if rule_type == "DOMAIN-SUFFIX":
-        return f"HOST-SUFFIX,{parts[1]}"
+        return f"HOST-SUFFIX,{parts[1]}{suffix}"
     elif rule_type == "DOMAIN":
-        return f"HOST,{parts[1]}"
+        return f"HOST,{parts[1]}{suffix}"
     elif rule_type == "DOMAIN-KEYWORD":
-        return f"HOST-KEYWORD,{parts[1]}"
+        return f"HOST-KEYWORD,{parts[1]}{suffix}"
     elif rule_type == "IP-CIDR":
-        # Quantumult X handles IP-CIDR without no-resolve
-        return f"IP-CIDR,{parts[1]}"
+        return f"IP-CIDR,{parts[1]}{suffix}"
     elif rule_type == "PROCESS-NAME":
-        # iOS QX does not support process name
         return None
-    return line
+    return f"{line}{suffix}"
 
 
 def extract_domains_for_router(lines):
@@ -230,11 +247,12 @@ def build_qx(config, rule_data):
     # 1. Output individual modular .list files for QX
     for r in config["rule_sources"]:
         rule_id = r["id"]
+        target = r.get("target")
         if "file" in r:
             raw_lines = rule_data.get(r["file"], [])
             qx_lines = []
             for line in raw_lines:
-                converted = to_qx_rule(line)
+                converted = to_qx_rule(line, target)
                 if converted:
                     qx_lines.append(converted)
             
@@ -244,7 +262,7 @@ def build_qx(config, rule_data):
             with open(out_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(list_content) + "\n")
     
-    # 2. Output full Quantumult X configuration profile (ddgksf2013 structure)
+    # 2. Output full Quantumult X configuration profile (public safe template)
     qx = []
     qx.append(f"# ===== Rules Hub Quantumult X Configuration =====")
     qx.append(f"# Author: {config['meta']['author']}")
@@ -252,25 +270,38 @@ def build_qx(config, rule_data):
     qx.append("")
     qx.append("[general]")
     qx.append("excluded_routes=192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, 127.0.0.0/8")
-    qx.append("geo_location_checker=http://ip-api.com/json/?lang=zh-CN, [\"countryCode\"]")
+    qx.append('geo_location_checker=http://ip-api.com/json/?lang=zh-CN, ["countryCode"]')
     qx.append("server_check_url=http://connectivitycheck.gstatic.com/generate_204")
     qx.append("")
     qx.append("[dns]")
+    qx.append("no-ipv6")
+    qx.append("no-system")
     qx.append("server=223.5.5.5")
     qx.append("server=119.29.29.29")
-    qx.append("server=https://dns.alidns.com/dns-query")
+    qx.append("server=1.1.1.1")
+    qx.append("server=8.8.8.8")
+    qx.append("server=/*.icloud.com/119.29.29.29")
+    qx.append("server=/*.icloud.com.cn/119.29.29.29")
+    qx.append("server=/*.tencent.com/119.29.29.29")
+    qx.append("server=/*.weixin.com/119.29.29.29")
     qx.append("")
     qx.append("[policy]")
-    # Static & url-test groups for QX
     qx.append("static=DIRECT, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Direct.png")
     qx.append("static=REJECT, reject, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Reject.png")
+    qx.append("static=Claude, 🇸🇬 新加坡自动备用, 狮城节点, Lightsail Singapore, Proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
+    qx.append("static=GoogleAI, 🇺🇸 美国自动优选, 美国节点, 🇸🇬 新加坡自动备用, Oracle San Jose, Proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
+    qx.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, DIRECT, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
+    qx.append("static=Media, 自动选择, 台湾节点, 香港节点, 狮城节点, 🇺🇸 美国自动优选, 美国节点, Proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
+    qx.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
+    qx.append("")
     qx.append("url-test=🇸🇬 新加坡自动备用, Lightsail Singapore, Lightsail Singapore HY2, url=http://connectivitycheck.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
     qx.append("url-test=🇺🇸 美国自动优选, Oracle San Jose, Google Oregon, url=http://connectivitycheck.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-United_States.png")
-    qx.append("static=Claude, 🇸🇬 新加坡自动备用, Lightsail Singapore, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
-    qx.append("static=GoogleAI, 🇺🇸 美国自动优选, 🇸🇬 新加坡自动备用, Oracle San Jose, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
-    qx.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, DIRECT, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
-    qx.append("static=Proxy, 🇸🇬 新加坡自动备用, 🇺🇸 美国自动优选, Lightsail Singapore, Oracle San Jose, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Global.png")
-    qx.append("static=Media, 🇸🇬 新加坡自动备用, 🇺🇸 美国自动优选, Proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/YouTube.png")
+    qx.append("url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png")
+    qx.append("url-latency-benchmark=狮城节点, server-tag-regex=(?=.*(新|狮|獅|SG|(?i)Singapore))^((?!(港|台|日|韩|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png")
+    qx.append("url-latency-benchmark=美国节点, server-tag-regex=(?=.*(美|US|(?i)States|American))^((?!(港|台|日|韩|新)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png")
+    qx.append("url-latency-benchmark=香港节点, server-tag-regex=(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png")
+    qx.append("url-latency-benchmark=台湾节点, server-tag-regex=(?=.*(台|TW|(?i)Taiwan))^((?!(港|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png")
+    qx.append("url-latency-benchmark=日本节点, server-tag-regex=(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png")
     qx.append("")
     qx.append("[server_local]")
     qx.append("# 请在此填入本地 Shadowsocks 节点 (如 Lightsail 新加坡、甲骨文圣何塞)")
@@ -281,15 +312,272 @@ def build_qx(config, rule_data):
         target = r.get("target")
         desc = r.get("desc", rule_id)
         if "file" in r:
-            qx.append(f"{base_url}/qx/{rule_id}.list, tag={rule_id}, force-remote-dns=true, opt-parser=false, update-interval=86400, policy={target}")
+            qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
     qx.append("")
     qx.append("[filter_local]")
     qx.append("geoip, cn, DIRECT")
     qx.append("final, Proxy")
+    qx.append("")
+    qx.append("[rewrite_remote]")
+    for rw in config.get("rewrites", []):
+        fn = rw["filename"]
+        name = rw["name"]
+        opt_str = str(rw.get("opt_parser", False)).lower()
+        enb_str = str(rw.get("enabled", True)).lower()
+        qx.append(f"{base_url}/qx/rewrites/{fn}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
     
     out_profile = QX_DIST / "profile.conf"
     with open(out_profile, "w", encoding="utf-8") as f:
         f.write("\n".join(qx) + "\n")
+
+
+def build_rewrites(config):
+    """Compile, mirror, and self-host Quantumult X rewrites."""
+    rw_dist = QX_DIST / "rewrites"
+    rw_dist.mkdir(parents=True, exist_ok=True)
+    REWRITES_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    base_url = config["meta"]["base_url"]
+    
+    rewrites = config.get("rewrites", [])
+    all_hostnames = set()
+    
+    filter_remote_snippets = [
+        "# ===== Rules Hub Quantumult X 远程分流订阅集合 (直接粘贴至 [filter_remote] 下) =====",
+        f"# 自动更新维护: {base_url}",
+        ""
+    ]
+    rewrite_remote_snippets = [
+        "# ===== Rules Hub Quantumult X 远程重写订阅集合 (直接粘贴至 [rewrite_remote] 下) =====",
+        f"# 自动更新维护: {base_url}",
+        ""
+    ]
+    
+    for rw in rewrites:
+        rw_id = rw["id"]
+        name = rw["name"]
+        fn = rw["filename"]
+        url = rw["upstream_url"]
+        opt_parser = rw.get("opt_parser", False)
+        enabled = rw.get("enabled", True)
+        cache_file = REWRITES_CACHE_DIR / fn
+        dest_file = rw_dist / fn
+        
+        content = ""
+        need_fetch = True
+        if cache_file.exists():
+            try:
+                import time
+                age = time.time() - os.path.getmtime(cache_file)
+                if age < 86400:  # 缓存 24 小时内直接命中，秒级极速构建
+                    need_fetch = False
+                    with open(cache_file, "r", encoding="utf-8", errors="ignore") as cf:
+                        content = cf.read()
+            except Exception:
+                pass
+                
+        if need_fetch:
+            try:
+                raw = fetch_upstream(url, timeout=4)
+                if raw and len(raw) > 30:
+                    content = "\n".join(raw)
+                    with open(cache_file, "w", encoding="utf-8") as cf:
+                        cf.write(content)
+            except Exception:
+                pass
+            
+        if not content and cache_file.exists():
+            with open(cache_file, "r", encoding="utf-8", errors="ignore") as cf:
+                content = cf.read()
+            
+        if not content:
+            continue
+            
+        # Clean / rewrite script references inside JS files to point to self-hosted URLs
+        self_hosted_url = f"{base_url}/qx/rewrites/{fn}"
+        content = content.replace(url, self_hosted_url)
+        if "raw.githubusercontent.com" in url:
+            gh_raw_alt = url.replace("https://raw.githubusercontent.com/", "https://github.com/").replace("/refs/heads/", "/raw/")
+            content = content.replace(gh_raw_alt, self_hosted_url)
+            
+        # Save to distribution
+        with open(dest_file, "w", encoding="utf-8") as out:
+            out.write(content)
+            
+        # Extract hostnames for all-in-one conf
+        hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
+        for hn_str in hn_matches:
+            for h in hn_str.split(","):
+                h = h.strip()
+                if h:
+                    all_hostnames.add(h)
+                    
+        opt_str = str(opt_parser).lower()
+        enb_str = str(enabled).lower()
+        rewrite_remote_snippets.append(f"{self_hosted_url}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
+        
+    # Write rewrite_remote.snippet
+    with open(QX_DIST / "rewrite_remote.snippet", "w", encoding="utf-8") as f:
+        f.write("\n".join(rewrite_remote_snippets) + "\n")
+        
+    # Build filter_remote snippet
+    for r in config.get("rule_sources", []):
+        rule_id = r["id"]
+        target = r.get("target")
+        desc = r.get("desc", rule_id)
+        if "file" in r:
+            filter_remote_snippets.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
+            
+    with open(QX_DIST / "filter_remote.snippet", "w", encoding="utf-8") as f:
+        f.write("\n".join(filter_remote_snippets) + "\n")
+        
+    # Build All-in-One rewrite conf (combining active conf rewrites)
+    aio = [
+        "# ===== Rules Hub Quantumult X All-In-One Unified Rewrites =====",
+        f"# Auto-synced daily at 04:00: {base_url}",
+        "",
+        f"hostname = {', '.join(sorted(list(all_hostnames)))}",
+        ""
+    ]
+    for rw in rewrites:
+        if rw.get("enabled", True) and rw["filename"].endswith(".conf"):
+            fn = rw["filename"]
+            fpath = rw_dist / fn
+            if fpath.exists():
+                aio.append(f"# --- {rw['name']} ---")
+                lines = fpath.read_text(encoding="utf-8", errors="ignore").splitlines()
+                for line in lines:
+                    s = line.strip()
+                    if not s.startswith("hostname") and not s.startswith("#") and not s.startswith(";"):
+                        aio.append(line)
+                aio.append("")
+                
+    with open(rw_dist / "all.conf", "w", encoding="utf-8") as f:
+        f.write("\n".join(aio) + "\n")
+
+
+def generate_personal_qx_config(config):
+    """If user's original QuantumultX input exists locally, generate a 100% loss-free personal configuration profile preserving MITM p12 certificate, passphrase, server_local nodes, and BoxJS."""
+    user_input_file = BASE_DIR / "user_qx_input.txt"
+    if not user_input_file.exists():
+        return
+        
+    base_url = config["meta"]["base_url"]
+    with open(user_input_file, "r", encoding="utf-8") as f:
+        raw_text = f.read()
+
+    def get_section(name):
+        m = re.search(r'\[' + name + r'\]\n(.*?)(?=\n\[|\Z)', raw_text, re.DOTALL)
+        return m.group(1).strip() if m else ''
+
+    mitm_block = get_section("mitm")
+    server_local_block = get_section("server_local")
+    server_remote_block = get_section("server_remote")
+    task_local_block = get_section("task_local")
+    http_backend_block = get_section("http_backend")
+    
+    from datetime import datetime, timezone, timedelta
+    tz_bj = timezone(timedelta(hours=8))
+    gen_time = datetime.now(tz_bj).strftime("%Y-%m-%d %H:%M:%S")
+
+    p = []
+    p.append("# ===== Quantumult X 个人专属定制配置文件 (防覆盖零丢失版) =====")
+    p.append(f"# 生成时间: {gen_time} (北京时间)")
+    p.append(f"# 规则与重写自托管服务: {base_url}")
+    p.append("# 特性: 已内嵌您的真实 MITM 根证书与口令、自建 VPS 节点、BoxJS 与全套自托管分流/重写")
+    p.append("# 提示: 导入此文件后，证书永不丢失，节点永不丢失，日常仅需在 QX 内更新分流与重写订阅即可！")
+    p.append("")
+    p.append("[general]")
+    p.append("server_check_url=http://www.gstatic.com/generate_204")
+    p.append("server_check_timeout=3000")
+    p.append("profile_img_url=https://github.githubassets.com/images/modules/site/integrators/google.png")
+    p.append("geo_location_checker=disabled")
+    p.append("resource_parser_url=https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Scripts/resource-parser.js")
+    p.append("excluded_routes=239.255.255.250/32, 24.105.30.129/32, 185.60.112.157/32, 185.60.112.158/32, 182.162.132.1/32")
+    p.append("dns_exclusion_list=*.10099.com.cn, *.cmpassport.com, *.jegotrip.com.cn, *.icitymobile.mobi, id6.me, *.pingan.com.cn")
+    p.append("")
+    p.append("[dns]")
+    p.append("no-ipv6")
+    p.append("no-system")
+    p.append("server=223.5.5.5")
+    p.append("server=119.29.29.29")
+    p.append("server=1.1.1.1")
+    p.append("server=8.8.8.8")
+    p.append("server=/*.icloud.com/119.29.29.29")
+    p.append("server=/*.icloud.com.cn/119.29.29.29")
+    p.append("server=/*.tencent.com/119.29.29.29")
+    p.append("server=/*.weixin.com/119.29.29.29")
+    p.append("")
+    p.append("[policy]")
+    p.append("# 1. 核心业务策略组")
+    p.append("static=DIRECT, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Direct.png")
+    p.append("static=REJECT, reject, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Reject.png")
+    p.append("static=Claude, 🇸🇬 新加坡自动备用, 狮城节点, Lightsail Singapore, Proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
+    p.append("static=GoogleAI, 🇺🇸 美国自动优选, 美国节点, 🇸🇬 新加坡自动备用, Oracle San Jose, Proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
+    p.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, DIRECT, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
+    p.append("static=Media, 自动选择, 台湾节点, 香港节点, 狮城节点, 🇺🇸 美国自动优选, 美国节点, Proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
+    p.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
+    p.append("")
+    p.append("# 2. 自建 VPS 容灾优选策略组")
+    p.append("url-test=🇸🇬 新加坡自动备用, Lightsail Singapore, url=http://www.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
+    p.append("url-test=🇺🇸 美国自动优选, Oracle San Jose, Google Oregon, url=http://www.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-United_States.png")
+    p.append("")
+    p.append("# 3. 机场订阅智能正则策略组")
+    p.append("url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png")
+    p.append("url-latency-benchmark=狮城节点, server-tag-regex=(?=.*(新|狮|獅|SG|(?i)Singapore))^((?!(港|台|日|韩|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png")
+    p.append("url-latency-benchmark=美国节点, server-tag-regex=(?=.*(美|US|(?i)States|American))^((?!(港|台|日|韩|新)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png")
+    p.append("url-latency-benchmark=香港节点, server-tag-regex=(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png")
+    p.append("url-latency-benchmark=台湾节点, server-tag-regex=(?=.*(台|TW|(?i)Taiwan))^((?!(港|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png")
+    p.append("url-latency-benchmark=日本节点, server-tag-regex=(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png")
+    p.append("")
+    p.append("[server_local]")
+    p.append(server_local_block)
+    p.append("")
+    p.append("[server_remote]")
+    p.append(server_remote_block)
+    p.append("")
+    p.append("[filter_remote]")
+    for r in config.get("rule_sources", []):
+        rule_id = r["id"]
+        target = r.get("target")
+        desc = r.get("desc", rule_id)
+        if "file" in r:
+            p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
+    p.append("")
+    p.append("[filter_local]")
+    p.append("# 本地私有局域网直连")
+    p.append("ip-cidr, 10.0.0.0/8, direct")
+    p.append("ip-cidr, 127.0.0.0/8, direct")
+    p.append("ip-cidr, 172.16.0.0/12, direct")
+    p.append("ip-cidr, 192.168.0.0/16, direct")
+    p.append("ip-cidr, 224.0.0.0/24, direct")
+    p.append("ip-cidr, 182.254.116.0/24, direct")
+    p.append("")
+    p.append("# 国内 GeoIP 精准直连与漏斗兜底")
+    p.append("geoip, cn, DIRECT")
+    p.append("final, Proxy")
+    p.append("")
+    p.append("[rewrite_remote]")
+    for rw in config.get("rewrites", []):
+        fn = rw["filename"]
+        name = rw["name"]
+        opt_str = str(rw.get("opt_parser", False)).lower()
+        enb_str = str(rw.get("enabled", True)).lower()
+        p.append(f"{base_url}/qx/rewrites/{fn}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
+    p.append("")
+    p.append("[task_local]")
+    p.append(task_local_block)
+    p.append("")
+    p.append("[http_backend]")
+    p.append(http_backend_block)
+    p.append("")
+    p.append("[mitm]")
+    p.append(mitm_block)
+    p.append("")
+    
+    personal_conf_path = BASE_DIR / "QuantumultX_Personal.conf"
+    with open(personal_conf_path, "w", encoding="utf-8") as out:
+        out.write("\n".join(p))
+    print(f"🔒 [Rules Hub] Generated personal profile: {personal_conf_path}")
 
 
 def build_router(config, rule_data):
@@ -386,6 +674,30 @@ def build_web_admin(config, rule_data):
         """)
         
     all_sources_html = "\n".join(source_cards_html)
+    
+    # Generate rewrite cards HTML
+    rewrites_cards_html = []
+    for rw in config.get("rewrites", []):
+        rw_id = rw["id"]
+        name = rw["name"]
+        fn = rw["filename"]
+        desc = rw.get("desc", name)
+        enabled = rw.get("enabled", True)
+        badge = '<span class="badge badge-sg">✅ 推荐启用</span>' if enabled else '<span class="badge badge-direct">⚪️ 可选备用</span>'
+        self_hosted_url = f"{base_url}/qx/rewrites/{fn}"
+        
+        rewrites_cards_html.append(f"""
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">{name} {badge}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">{desc} • <code>{fn}</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('{self_hosted_url}')">
+            📋 复制订阅
+          </button>
+        </div>
+        """)
+    all_rewrites_html = "\n".join(rewrites_cards_html)
     
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -727,11 +1039,22 @@ def build_web_admin(config, rule_data):
             <span class="card-icon">🎯</span>
             <div class="card-title">Quantumult X (iOS)</div>
           </div>
-          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，按业务切分独立远程分流模块。</p>
+          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，自托管 16+ 核心去广告与 VIP 解锁重写。</p>
         </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/qx/profile.conf')">
-          📋 复制 QX 完整配置链接
-        </button>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="copy-btn" onclick="copyLink('{base_url}/qx/profile.conf')">
+            📋 复制 QX 完整配置链接
+          </button>
+          <button class="copy-btn" style="background: rgba(52, 211, 153, 0.15); border-color: var(--success); color: var(--success);" onclick="copyLink('{base_url}/qx/rewrite_remote.snippet')">
+            🛡️ 复制远程重写订阅集合
+          </button>
+          <button class="copy-btn" style="background: rgba(167, 139, 250, 0.15); border-color: var(--purple); color: var(--purple);" onclick="copyLink('{base_url}/qx/filter_remote.snippet')">
+            🌐 复制远程分流订阅集合
+          </button>
+          <button class="copy-btn" style="background: rgba(56, 189, 248, 0.15); border-color: var(--accent); color: var(--accent);" onclick="copyLink('{base_url}/qx/rewrites/all.conf')">
+            ⚡️ 复制 All-in-One 整合重写
+          </button>
+        </div>
       </div>
 
       <!-- Shadowrocket Card -->
@@ -761,6 +1084,15 @@ def build_web_admin(config, rule_data):
           📋 复制软路由域名列表
         </button>
       </div>
+    </div>
+
+    <!-- Quantumult X Rewrites Section -->
+    <div class="section-title">
+      <span>🛡️ Quantumult X 自托管重写与 VIP 解锁列表</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">每日 04:00 自动拉取上游保持最新 • 免翻墙高速分发</span>
+    </div>
+    <div style="margin-bottom: 2rem;">
+      {all_rewrites_html}
     </div>
 
     <!-- Rule Details Section -->
@@ -910,6 +1242,8 @@ def main():
     
     print("🔨 Generating Quantumult X configurations and rulesets...")
     build_qx(config, rule_data)
+    build_rewrites(config)
+    generate_personal_qx_config(config)
     
     print("🔨 Generating Shadowrocket rulesets...")
     build_shadowrocket(config, rule_data)

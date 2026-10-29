@@ -13,3 +13,7 @@ Thumbs.db
 # Sensitive local context & memo (Do not push to public repo)
 PROJECT_CONTEXT.md
 *.local.md
+user_qx_input.txt
+*personal*.conf
+*Personal*.conf
+*.p12
