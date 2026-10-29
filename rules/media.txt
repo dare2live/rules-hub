@@ -1,7 +1,9 @@
-# 海外主流流媒体
+# 海外主流流媒体 (YouTube / Netflix / Spotify / Disney+)
 DOMAIN-SUFFIX,youtube.com
 DOMAIN-SUFFIX,googlevideo.com
 DOMAIN-SUFFIX,ytimg.com
+DOMAIN-SUFFIX,youtu.be
+DOMAIN-SUFFIX,ggpht.com
 DOMAIN-SUFFIX,netflix.com
 DOMAIN-SUFFIX,netflix.net
 DOMAIN-SUFFIX,nflximg.net
@@ -11,3 +13,14 @@ DOMAIN-SUFFIX,spotify.com
 DOMAIN-SUFFIX,scdn.co
 DOMAIN-SUFFIX,disneyplus.com
 DOMAIN-SUFFIX,disney-portal.my.onetrust.com
+
+# 电视端 Stremio、足球与流媒体点播 (海报刮削、元数据、字幕)
+DOMAIN-SUFFIX,strem.io
+DOMAIN-SUFFIX,stremio.com
+DOMAIN-SUFFIX,metahub.space
+DOMAIN-SUFFIX,tmdb.org
+DOMAIN-SUFFIX,themoviedb.org
+DOMAIN-SUFFIX,opensubtitles.org
+DOMAIN-SUFFIX,opensubtitles.com
+DOMAIN-SUFFIX,torrentio.strem.fun
+DOMAIN-SUFFIX,matchtv.ru
