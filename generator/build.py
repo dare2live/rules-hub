@@ -330,47 +330,101 @@ def build_shadowrocket(config, rule_data):
                 f.write("\n".join(list_content) + "\n")
 
 
-def build_web_admin(config):
-    """Generate the static Web Admin dashboard for Cloudflare Pages."""
+def build_web_admin(config, rule_data):
+    """Generate the static Web Admin dashboard for Cloudflare / GitHub Pages."""
     WEB_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
+    
+    # Calculate timestamps and stats
+    from datetime import datetime, timezone, timedelta
+    tz_bj = timezone(timedelta(hours=8))
+    build_time = datetime.now(tz_bj).strftime("%Y-%m-%d %H:%M:%S")
+    
+    total_rules = sum(len(lines) for lines in rule_data.values())
+    
+    # Generate source cards HTML
+    source_cards_html = []
+    for r in config.get("rule_sources", []):
+        r_id = r["id"]
+        target = r.get("target", "DIRECT")
+        desc = r.get("desc", r_id)
+        rel_path = r.get("file", "")
+        lines = rule_data.get(rel_path, [])
+        count = len(lines)
+        upstreams = r.get("upstream_urls", [])
+        
+        up_tags = []
+        if upstreams:
+            for u in upstreams:
+                u_name = u.split("/")[-2] if "/" in u else "Upstream"
+                up_tags.append(f'<span class="badge badge-upstream">🌐 {u_name}</span>')
+        else:
+            up_tags.append('<span class="badge badge-local">🏠 本地维护</span>')
+            
+        up_tags_html = " ".join(up_tags)
+        
+        # Sample preview lines
+        preview_text = "\n".join(lines[:50])
+        if len(lines) > 50:
+            preview_text += f"\n... 以及其余 {len(lines) - 50} 条规则"
+            
+        source_cards_html.append(f"""
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">{desc}</div>
+              <div class="rule-detail-meta">分类标识: <code>{r_id}</code> | 目标策略: <strong>{target}</strong> | 包含规则: <strong>{count}</strong> 条</div>
+            </div>
+            <div>{up_tags_html}</div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 ({count} 条)</summary>
+            <pre class="rule-code-block">{preview_text}</pre>
+          </details>
+        </div>
+        """)
+        
+    all_sources_html = "\n".join(source_cards_html)
     
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rules Hub - 跨端多协议规则托管中心</title>
+  <title>Rules Hub - 跨端多协议规则托管与运维看板</title>
   <link rel="icon" href="https://fav.farm/🚀">
   <style>
     :root {{
       --bg: #0f172a;
       --card-bg: #1e293b;
+      --card-border: #334155;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.2);
-      --border: #334155;
+      --accent-glow: rgba(56, 189, 248, 0.15);
       --success: #34d399;
+      --warning: #fbbf24;
+      --purple: #a78bfa;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       background: var(--bg);
       color: var(--text-main);
       padding: 2rem 1rem;
       min-height: 100vh;
+      line-height: 1.5;
     }}
     .container {{
-      max-width: 900px;
+      max-width: 960px;
       margin: 0 auto;
     }}
     header {{
       text-align: center;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }}
     header h1 {{
-      font-size: 2.2rem;
+      font-size: 2.3rem;
       font-weight: 700;
       color: var(--accent);
       margin-bottom: 0.5rem;
@@ -379,24 +433,90 @@ def build_web_admin(config):
       color: var(--text-muted);
       font-size: 1rem;
     }}
+    
+    /* Status banner */
+    .status-banner {{
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }}
+    .status-item {{
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.92rem;
+    }}
+    .status-label {{ color: var(--text-muted); }}
+    .status-val {{ font-weight: 600; color: var(--accent); }}
+
+    /* Quick Action Ops Bar */
+    .ops-bar {{
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 2.5rem;
+    }}
+    .ops-title {{
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }}
+    .ops-buttons {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }}
+    .ops-btn {{
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }}
+    .ops-btn:hover {{
+      border-color: var(--accent);
+      background: #172554;
+      color: #38bdf8;
+    }}
+
+    /* Grid */
     .grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
+      gap: 1.25rem;
       margin-bottom: 2.5rem;
     }}
     .card {{
       background: var(--card-bg);
-      border: 1px solid var(--border);
+      border: 1px solid var(--card-border);
       border-radius: 12px;
-      padding: 1.5rem;
+      padding: 1.25rem;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       transition: transform 0.2s, box-shadow 0.2s;
     }}
     .card:hover {{
-      transform: translateY(-3px);
+      transform: translateY(-2px);
       box-shadow: 0 8px 24px var(--accent-glow);
       border-color: var(--accent);
     }}
@@ -404,18 +524,13 @@ def build_web_admin(config):
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }}
-    .card-icon {{
-      font-size: 1.8rem;
-    }}
-    .card-title {{
-      font-size: 1.25rem;
-      font-weight: 600;
-    }}
+    .card-icon {{ font-size: 1.6rem; }}
+    .card-title {{ font-size: 1.15rem; font-weight: 600; }}
     .card-desc {{
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       margin-bottom: 1.25rem;
       line-height: 1.4;
     }}
@@ -423,9 +538,10 @@ def build_web_admin(config):
       background: var(--accent);
       color: #0f172a;
       border: none;
-      padding: 0.65rem 1rem;
+      padding: 0.6rem 1rem;
       border-radius: 8px;
       font-weight: 600;
+      font-size: 0.88rem;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -434,18 +550,83 @@ def build_web_admin(config):
       transition: opacity 0.2s;
     }}
     .copy-btn:hover {{ opacity: 0.9; }}
+
+    /* Section titles */
     .section-title {{
-      font-size: 1.4rem;
+      font-size: 1.3rem;
       margin-bottom: 1rem;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 0.5rem;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--card-border);
       padding-bottom: 0.5rem;
     }}
+
+    /* Rule detail cards */
+    .rule-detail-card {{
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.85rem;
+    }}
+    .rule-detail-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.5rem;
+    }}
+    .rule-detail-title {{
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text-main);
+    }}
+    .rule-detail-meta {{
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }}
+    .badge {{
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }}
+    .badge-upstream {{ background: #1e3a8a; color: #93c5fd; }}
+    .badge-local {{ background: #064e3b; color: #6ee7b7; }}
+    .badge-sg {{ background: #064e3b; color: #34d399; }}
+    .badge-us {{ background: #1e3a8a; color: #60a5fa; }}
+    .badge-direct {{ background: #374151; color: #9ca3af; }}
+    
+    details {{
+      margin-top: 0.5rem;
+    }}
+    .toggle-btn {{
+      font-size: 0.82rem;
+      color: var(--accent);
+      cursor: pointer;
+      user-select: none;
+    }}
+    .rule-code-block {{
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.78rem;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 0.5rem;
+      white-space: pre-wrap;
+      color: #cbd5e1;
+    }}
+
+    /* Table */
     .table-container {{
       background: var(--card-bg);
-      border: 1px solid var(--border);
+      border: 1px solid var(--card-border);
       border-radius: 12px;
       overflow-x: auto;
       margin-bottom: 2rem;
@@ -454,24 +635,15 @@ def build_web_admin(config):
       width: 100%;
       border-collapse: collapse;
       text-align: left;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
     }}
     th, td {{
-      padding: 0.85rem 1.2rem;
-      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.2rem;
+      border-bottom: 1px solid var(--card-border);
     }}
     th {{ color: var(--text-muted); font-weight: 600; }}
     tr:last-child td {{ border-bottom: none; }}
-    .badge {{
-      display: inline-block;
-      padding: 0.2rem 0.55rem;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }}
-    .badge-sg {{ background: #064e3b; color: #34d399; }}
-    .badge-us {{ background: #1e3a8a; color: #60a5fa; }}
-    .badge-direct {{ background: #374151; color: #9ca3af; }}
+
     .toast {{
       position: fixed;
       bottom: 2rem;
@@ -492,9 +664,46 @@ def build_web_admin(config):
   <div class="container">
     <header>
       <h1>🚀 Rules Hub</h1>
-      <p>统一源头维护 • 多端自动编译 • 零节点敏感信息泄露 • 全 Serverless 托管</p>
+      <p>统一源头维护 • 开源全量融合 • 自动白名单免疫 • 每日零操作自更新</p>
     </header>
 
+    <!-- Status Banner -->
+    <div class="status-banner">
+      <div class="status-item">
+        <span class="status-label">⏱ 最后编译/同步时间:</span>
+        <span class="status-val">{build_time}</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">📊 融合规则总数:</span>
+        <span class="status-val">{total_rules} 条</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">🔄 自动同步频率:</span>
+        <span class="status-val">每日凌晨 04:00 (Cron)</span>
+      </div>
+    </div>
+
+    <!-- Quick Ops Control Panel -->
+    <div class="ops-bar">
+      <div class="ops-title">🛠 规则维护与源头控制台（点击即可在线操作）</div>
+      <div class="ops-buttons">
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/actions/workflows/deploy.yml" target="_blank">
+          ⚡️ 手动立即触发全量同步
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/config.yaml" target="_blank">
+          ⚙️ 添加/配置开源上游源 (config.yaml)
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/rules/direct.txt" target="_blank">
+          📝 增删直连与白名单 (direct.txt)
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub" target="_blank">
+          📦 浏览 GitHub 源码仓库
+        </a>
+      </div>
+    </div>
+
+    <!-- Client Copy Grid -->
+    <div class="section-title">📲 客户端一键托管与配置订阅</div>
     <div class="grid">
       <!-- Surge Card -->
       <div class="card">
@@ -503,7 +712,7 @@ def build_web_admin(config):
             <span class="card-icon">⚡️</span>
             <div class="card-title">Surge 5 (Mac / iOS)</div>
           </div>
-          <p class="card-desc">完整托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。</p>
+          <p class="card-desc">托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。</p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/surge/profile.conf')">
           📋 复制 Surge 托管链接
@@ -517,7 +726,7 @@ def build_web_admin(config):
             <span class="card-icon">🎯</span>
             <div class="card-title">Quantumult X (iOS)</div>
           </div>
-          <p class="card-desc">借鉴墨鱼规范全模块化结构，自动转译 HOST 语法，按业务切分独立远程分流与去广告重写。</p>
+          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，按业务切分独立远程分流模块。</p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/qx/profile.conf')">
           📋 复制 QX 完整配置链接
@@ -531,7 +740,7 @@ def build_web_admin(config):
             <span class="card-icon">🚀</span>
             <div class="card-title">Shadowrocket (iOS)</div>
           </div>
-          <p class="card-desc">小火箭远程配置订阅，支持直接订阅规则集或全量配置模板，完美兼容 Hysteria 2 与 Shadowsocks。</p>
+          <p class="card-desc">小火箭远程规则集订阅，完美兼容 Hysteria 2 与 Shadowsocks 多协议节点。</p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/shadowrocket/claude.list')">
           📋 复制小火箭规则集
@@ -545,7 +754,7 @@ def build_web_admin(config):
             <span class="card-icon">📶</span>
             <div class="card-title">梅林软路由 (Shadowsocks)</div>
           </div>
-          <p class="card-desc">针对软路由 SS 插件的自定义黑白名单，Claude/GoogleAI 域名强制走代理，微信企微强制直连。</p>
+          <p class="card-desc">软路由 SS 插件黑白名单，Claude/GoogleAI 强制走代理，微信企微强制直连。</p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/router/merlin_blacklist.txt')">
           📋 复制软路由域名列表
@@ -553,6 +762,16 @@ def build_web_admin(config):
       </div>
     </div>
 
+    <!-- Rule Details Section -->
+    <div class="section-title">
+      <span>🔍 融合规则源明细与即时检索</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">已开启本地白名单免疫拦截防护</span>
+    </div>
+    <div style="margin-bottom: 2rem;">
+      {all_sources_html}
+    </div>
+
+    <!-- Routing Strategy Map -->
     <div class="section-title">📊 核心业务策略组映射清单</div>
     <div class="table-container">
       <table>
@@ -697,8 +916,8 @@ def main():
     print("🔨 Generating Asuswrt-Merlin soft router custom lists...")
     build_router(config, rule_data)
     
-    print("🔨 Generating Web Admin dashboard for Cloudflare Pages...")
-    build_web_admin(config)
+    print("🔨 Generating Web Admin dashboard for Cloudflare / GitHub Pages...")
+    build_web_admin(config, rule_data)
     
     print("✅ [Rules Hub] Build completed successfully!")
 
