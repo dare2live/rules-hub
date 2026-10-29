@@ -300,12 +300,13 @@ def build_router(config, rule_data):
     direct_lines = rule_data.get("rules/direct.txt", [])
     whitelist_domains = extract_domains_for_router(direct_lines)
     
-    # 2. Custom Blacklist / GFWList (Always PROXY on router, e.g. Claude, GoogleAI, WorkBuddy)
+    # 2. Custom Blacklist / GFWList (Always PROXY on router: Claude, GoogleAI, Media, OpenAI, TikTok, Proxy, etc.)
     proxy_lines = []
-    proxy_lines.extend(rule_data.get("rules/claude.txt", []))
-    proxy_lines.extend(rule_data.get("rules/google-ai.txt", []))
-    proxy_lines.extend(rule_data.get("rules/workbuddy.txt", []))
-    proxy_lines.extend(rule_data.get("rules/media.txt", []))
+    for r in config.get("rule_sources", []):
+        if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy", "Media", "Proxy"):
+            rel_path = r.get("file")
+            if rel_path and rel_path in rule_data:
+                proxy_lines.extend(rule_data[rel_path])
     blacklist_domains = extract_domains_for_router(proxy_lines)
     
     with open(ROUTER_DIST / "merlin_whitelist.txt", "w", encoding="utf-8") as f:

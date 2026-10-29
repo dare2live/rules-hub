@@ -136,6 +136,25 @@ rule_sources:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Netflix/Netflix.list"
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Spotify/Spotify.list"
 
+  - id: "openai"
+    target: "Proxy"
+    file: "rules/openai.txt"
+    desc: "OpenAI / ChatGPT / Sora"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/OpenAI/OpenAI.list"
+
+  - id: "tiktok"
+    target: "Proxy"
+    file: "rules/tiktok.txt"
+    desc: "TikTok 全生态"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/TikTok/TikTok.list"
+
+  - id: "proxy"
+    target: "Proxy"
+    file: "rules/proxy.txt"
+    desc: "通用海外常用站点（弥补老旧 GFWList 缺失的现代海外站点与 Stremio 详情页海报）"
+
   - id: "reject"
     target: "REJECT"
     file: "rules/reject.txt"
