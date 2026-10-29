@@ -32,7 +32,10 @@ rm -rf "$WORK"; mkdir -p "$WORK" || { log "无法创建 $WORK"; exit 1; }
 nvram show 2>/dev/null | sort > "$WORK/nvram.txt"
 
 # ---- 2. fancyss 配置（dbus，含 base64 黑白名单）----
-dbus show 2>/dev/null | sort > "$WORK/dbus.txt"
+# 注意：这台机器的 dbus 只有 list/listall/get/set，没有 show。
+# 写成 `dbus show` 会静默输出 0 行 —— 备份看起来成功，实际没有配置。
+dbus listall 2>/dev/null | sort > "$WORK/dbus.txt"
+[ -s "$WORK/dbus.txt" ] || log "警告: dbus.txt 为空，fancyss 配置未备份"
 
 # ---- 3. 系统与关键状态 ----
 {
@@ -48,8 +51,12 @@ dbus show 2>/dev/null | sort > "$WORK/dbus.txt"
   cru l 2>/dev/null
 } > "$WORK/system.txt" 2>&1
 
-# ---- 4. /jffs 打包（脚本 / 配置 / 密钥）----
-tar czf "$WORK/jffs.tar.gz" -C / jffs 2>/dev/null
+# ---- 4. /jffs 打包（脚本 / 配置）----
+# 刻意排除 /jffs/.ssh：里面是登录本备份所在服务器的私钥。
+# 把「钥匙」放进「用这把钥匙才能打开的柜子」，一旦备份外流就等于交出服务器。
+# 恢复时重新生成密钥即可（见 docs 的恢复章节）。
+JLIST=$(ls -a /jffs | grep -vE '^\.$|^\.\.$|^\.ssh$' | sed 's|^|jffs/|' | tr '\n' ' ')
+tar czf "$WORK/jffs.tar.gz" -C / $JLIST 2>/dev/null
 
 # ---- 5. 汇总 ----
 tar czf "/tmp/$NAME" -C "$WORK" . 2>/dev/null
