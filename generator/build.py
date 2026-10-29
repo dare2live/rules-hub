@@ -120,7 +120,11 @@ def to_qx_rule(line, target=None):
     if not parts:
         return None
     rule_type = parts[0].upper()
-    suffix = f",{target}" if target else ""
+    if target:
+        qx_target = target.lower() if target.upper() in ["DIRECT", "REJECT"] else target
+        suffix = f",{qx_target}"
+    else:
+        suffix = ""
     
     if rule_type == "DOMAIN-SUFFIX":
         return f"HOST-SUFFIX,{parts[1]}{suffix}"
@@ -286,13 +290,11 @@ def build_qx(config, rule_data):
     qx.append("server=/*.weixin.com/119.29.29.29")
     qx.append("")
     qx.append("[policy]")
-    qx.append("static=DIRECT, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Direct.png")
-    qx.append("static=REJECT, reject, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Reject.png")
     qx.append("static=Claude, 🇸🇬 新加坡自动备用, 狮城节点, Lightsail Singapore, Proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
     qx.append("static=GoogleAI, 🇺🇸 美国自动优选, 美国节点, 🇸🇬 新加坡自动备用, Oracle San Jose, Proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
-    qx.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, DIRECT, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
+    qx.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
     qx.append("static=Media, 自动选择, 台湾节点, 香港节点, 狮城节点, 🇺🇸 美国自动优选, 美国节点, Proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
-    qx.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
+    qx.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
     qx.append("")
     qx.append("url-test=🇸🇬 新加坡自动备用, Lightsail Singapore, Lightsail Singapore HY2, url=http://connectivitycheck.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
     qx.append("url-test=🇺🇸 美国自动优选, Oracle San Jose, Google Oregon, url=http://connectivitycheck.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-United_States.png")
@@ -310,12 +312,13 @@ def build_qx(config, rule_data):
     for r in config["rule_sources"]:
         rule_id = r["id"]
         target = r.get("target")
+        force_target = target.lower() if target and target.upper() in ["DIRECT", "REJECT"] else target
         desc = r.get("desc", rule_id)
         if "file" in r:
-            qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
+            qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
     qx.append("")
     qx.append("[filter_local]")
-    qx.append("geoip, cn, DIRECT")
+    qx.append("geoip, cn, direct")
     qx.append("final, Proxy")
     qx.append("")
     qx.append("[rewrite_remote]")
@@ -509,13 +512,11 @@ def generate_personal_qx_config(config):
     p.append("")
     p.append("[policy]")
     p.append("# 1. 核心业务策略组")
-    p.append("static=DIRECT, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Direct.png")
-    p.append("static=REJECT, reject, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Reject.png")
     p.append("static=Claude, 🇸🇬 新加坡自动备用, 狮城节点, Lightsail Singapore, Proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
     p.append("static=GoogleAI, 🇺🇸 美国自动优选, 美国节点, 🇸🇬 新加坡自动备用, Oracle San Jose, Proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
-    p.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, DIRECT, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
+    p.append("static=WorkBuddy, 🇸🇬 新加坡自动备用, 狮城节点, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
     p.append("static=Media, 自动选择, 台湾节点, 香港节点, 狮城节点, 🇺🇸 美国自动优选, 美国节点, Proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
-    p.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
+    p.append("static=Proxy, 自动选择, 🇸🇬 新加坡自动备用, 狮城节点, 🇺🇸 美国自动优选, 美国节点, 香港节点, 台湾节点, 日本节点, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
     p.append("")
     p.append("# 2. 自建 VPS 容灾优选策略组")
     p.append("url-test=🇸🇬 新加坡自动备用, Lightsail Singapore, url=http://www.gstatic.com/generate_204, interval=300, tolerance=50, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
@@ -539,9 +540,10 @@ def generate_personal_qx_config(config):
     for r in config.get("rule_sources", []):
         rule_id = r["id"]
         target = r.get("target")
+        force_target = target.lower() if target and target.upper() in ["DIRECT", "REJECT"] else target
         desc = r.get("desc", rule_id)
         if "file" in r:
-            p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
+            p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
     p.append("")
     p.append("[filter_local]")
     p.append("# 本地私有局域网直连")
@@ -553,7 +555,7 @@ def generate_personal_qx_config(config):
     p.append("ip-cidr, 182.254.116.0/24, direct")
     p.append("")
     p.append("# 国内 GeoIP 精准直连与漏斗兜底")
-    p.append("geoip, cn, DIRECT")
+    p.append("geoip, cn, direct")
     p.append("final, Proxy")
     p.append("")
     p.append("[rewrite_remote]")
