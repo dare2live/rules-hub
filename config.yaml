@@ -5,6 +5,10 @@ meta:
   name: "Rules Hub"
   author: "dare2live"
   base_url: "https://dare2live.github.io/rules-hub"  # 默认使用原生免配置的 GitHub Pages（也可换为 Cloudflare Pages: https://rules-hub.pages.dev）
+  # 备用下载源：GitHub Pages 在国内时通时不通，软路由同步失败时自动回退到这里。
+  # 由 CI 把 dist/ 推送到 gh-pages 分支，jsDelivr 直接读取该分支。
+  # 留空则关闭回退。
+  base_url_bak: "https://cdn.jsdelivr.net/gh/dare2live/rules-hub@gh-pages"
   managed_interval: 86400  # 自动同步刷新周期（秒）
 
 # 软路由（华硕梅林 fancyss）订阅与自动更新
