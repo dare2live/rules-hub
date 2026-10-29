@@ -313,10 +313,12 @@ rewrites:
   - id: "missav"
     name: "MissAV"
     filename: "missav.ads.js"
-    upstream_url: "https://ddgksf2013.top/scripts/missav.ads.js"
+    # 上游版本停在 2025.12，站点广告位已换成 go.mayzaent.com / t.rallytrck.website，
+    # 上游选择器一个都没覆盖到，所以改为本地维护（rewrites/local/missav.ads.js）。
+    local_file: "rewrites/local/missav.ads.js"
     opt_parser: true
     enabled: true
-    desc: "MissAV 网页去广告与播放增强（源站按 UA 放行，已适配 Quantumult UA 抓取）"
+    desc: "MissAV 网页去广告与弹窗拦截（本地维护，2026-10 实测广告位）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   - id: "caiyun_ads"
