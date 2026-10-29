@@ -12,6 +12,9 @@ Generates:
 import os
 import sys
 import re
+import time
+import base64
+import hashlib
 import yaml
 import urllib.request
 import urllib.error
@@ -21,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config.yaml"
 RULES_DIR = BASE_DIR / "rules"
 DIST_DIR = BASE_DIR / "dist"
+DATA_DIR = BASE_DIR / "data"
 
 SURGE_DIST = DIST_DIR / "surge"
 QX_DIST = DIST_DIR / "qx"
@@ -28,6 +32,18 @@ ROCKET_DIST = DIST_DIR / "shadowrocket"
 ROUTER_DIST = DIST_DIR / "router"
 WEB_DIST = DIST_DIR / "web"
 REWRITES_CACHE_DIR = BASE_DIR / "rewrites" / "cached"
+
+# Quantumult X 校验配置时必须存在的段落（缺任意一个都会导入失败）
+REQUIRED_QX_SECTIONS = [
+    "general", "dns", "policy", "server_local", "server_remote",
+    "filter_local", "filter_remote", "rewrite_local", "rewrite_remote",
+    "task_local", "http_backend", "mitm",
+]
+
+# 上游数据源（用于软路由规则，7 天刷新一次并落地缓存）
+CHNROUTE_URL = "https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt"
+GFWLIST_URL = "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt"
+DATA_MAX_AGE = 7 * 86400
 
 
 def load_config():
@@ -66,6 +82,117 @@ def fetch_upstream(url, timeout=8):
     except Exception as e:
         print(f"   ⚠️  [Warning] Upstream fetch failed for {url}: {e} (Continuing with local rules)")
         return []
+
+
+def fetch_raw(url, timeout=12):
+    """Fetch raw text without stripping comments/blank lines (safe for JS & data files)."""
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"   ⚠️  [Warning] Raw fetch failed for {url}: {e}")
+        return None
+
+
+def is_html_payload(text):
+    """Detect HTML landing/error pages (e.g. Cloudflare 302 -> homepage) masquerading as rule files."""
+    if not text:
+        return False
+    head = text.lstrip()[:400].lower()
+    return ("<!doctype" in head) or head.startswith("<html") or "<head>" in head or "<title>" in head
+
+
+def valid_rewrite_payload(text):
+    """A usable rewrite resource must contain rewrite/script directives, not an HTML page."""
+    if not text or len(text.strip()) < 30 or is_html_payload(text):
+        return False
+    markers = ("[rewrite_local]", "[mitm]", "hostname", " url ", "url script", "script-", "reject", "http-response")
+    return any(m in text for m in markers)
+
+
+def read_text(path):
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def write_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def is_fresh(path, max_age=DATA_MAX_AGE):
+    try:
+        return path.exists() and (time.time() - os.path.getmtime(path)) < max_age
+    except Exception:
+        return False
+
+
+def load_cached_data(cache_path, url, parser, min_items, label):
+    """Load a data file from cache when fresh, otherwise refresh from upstream with validation.
+
+    Bad payloads never overwrite a good cache — this is what kept 4 HTML pages alive
+    in the rewrite mirror before.
+    """
+    if is_fresh(cache_path):
+        cached = read_text(cache_path)
+        if cached:
+            return parser(cached)
+    raw = fetch_raw(url, timeout=20)
+    if raw and not is_html_payload(raw):
+        items = parser(raw)
+        if len(items) >= min_items:
+            write_text(cache_path, raw)
+            print(f"   ✅ [Data] {label}: 已刷新 {len(items)} 条")
+            return items
+        print(f"   ⚠️  [Data] {label}: 内容过短（{len(items)} 条），疑似异常")
+    cached = read_text(cache_path)
+    if cached:
+        print(f"   ℹ️  [Data] {label}: 使用本地缓存")
+        return parser(cached)
+    print(f"   ⚠️  [Data] {label}: 无可用数据")
+    return []
+
+
+def parse_cidr_list(text):
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith(";"):
+            continue
+        if "/" in s and " " not in s:
+            out.append(s)
+    return out
+
+
+def parse_gfwlist_domains(text):
+    """Decode the base64 AutoProxy gfwlist and extract plain domains."""
+    try:
+        decoded = base64.b64decode(text.encode("utf-8")).decode("utf-8", errors="ignore")
+    except Exception:
+        decoded = text
+    domains = []
+    for line in decoded.splitlines():
+        s = line.strip()
+        if not s or s.startswith("!") or s.startswith("[") or s.startswith("@@"):
+            continue
+        if s.startswith("/") and s.endswith("/"):
+            continue
+        if "*" in s:
+            continue
+        if s.startswith("||"):
+            s = s[2:]
+        elif s.startswith("|") or s.startswith("."):
+            s = s[1:]
+        s = s.split("/")[0].split("^")[0].split(":")[0].strip().lower()
+        if re.match(r"^[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}$", s):
+            domains.append(s)
+    return sorted(set(domains))
 
 
 def normalize_rule(line):
@@ -256,10 +383,92 @@ def build_surge(config, rule_data):
         f.write("\n".join(profile) + "\n")
 
 
-def build_qx(config, rule_data):
+QX_NAME_MAP = {"DIRECT": "direct", "REJECT": "reject", "Proxy": "全球加速", "Media": "国际媒体"}
+QX_ICONS = {
+    "Claude": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png",
+    "GoogleAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png",
+    "WorkBuddy": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
+    "全球加速": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png",
+    "国际媒体": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png",
+    "兜底分流": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png",
+    "自动选择": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png",
+}
+
+
+def build_qx_policy_block(config, node_tags):
+    """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。"""
+    policies = {p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"}
+    order = ["Proxy", "Media", "Claude", "GoogleAI", "WorkBuddy"]
+    names = {k: QX_NAME_MAP.get(k, k) for k in policies}
+    node_set = set(node_tags)
+    lines = []
+    for key in order:
+        p = policies.get(key)
+        if not p:
+            continue
+        members = []
+        for m in p.get("proxies", []):
+            mu = str(m).upper()
+            if mu == "DIRECT":
+                mm = "direct"
+            elif mu == "REJECT":
+                mm = "reject"
+            elif m in names:
+                mm = names[m]
+            elif m in node_set:
+                mm = m
+            else:
+                continue
+            if mm not in members:
+                members.append(mm)
+        if not members:
+            members = ["proxy"]
+        name = names[key]
+        icon = QX_ICONS.get(name)
+        lines.append(f"static={name}, {', '.join(members)}" + (f", img-url={icon}" if icon else ""))
+
+    tail = []
+    for t in ["全球加速", "direct"] + list(node_tags):
+        if t not in tail:
+            tail.append(t)
+    lines.append(f"static=兜底分流, {', '.join(tail)}, img-url={QX_ICONS['兜底分流']}")
+
+    if node_tags:
+        lines.append(
+            "url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, "
+            f"check-interval=900, tolerance=0, img-url={QX_ICONS['自动选择']}"
+        )
+    return lines
+
+
+def validate_qx_config(text, label):
+    """Import-blocking checks: required sections + policy references that QX will reject."""
+    problems = []
+    for sec in REQUIRED_QX_SECTIONS:
+        if not re.search(r"^\[" + re.escape(sec) + r"\]\s*$", text, re.MULTILINE):
+            problems.append(f"缺少段落 [{sec}]")
+
+    defined = set(re.findall(
+        r"^(?:static|url-latency-benchmark|available|round-robin|dest-hash)=([^,\n]+)", text, re.MULTILINE))
+    defined |= {"direct", "reject", "proxy"}
+
+    for pol in re.findall(r"force-policy=([^,\n]+)", text):
+        if pol.strip() not in defined:
+            problems.append(f"force-policy 引用了未定义的策略: {pol.strip()}")
+
+    if problems:
+        print(f"   ❌ [QX] {label} 校验未通过：")
+        for p in problems:
+            print(f"        - {p}")
+    else:
+        print(f"   ✅ [QX] {label} 校验通过（{len(REQUIRED_QX_SECTIONS)} 个必需段落齐全）")
+    return problems
+
+
+def build_qx(config, rule_data, produced=None):
     QX_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
-    
+
     # 1. Output individual modular .list files for QX
     for r in config["rule_sources"]:
         rule_id = r["id"]
@@ -271,23 +480,24 @@ def build_qx(config, rule_data):
                 converted = to_qx_rule(line, target)
                 if converted:
                     qx_lines.append(converted)
-            
+
             list_content = [f"# {r.get('desc', rule_id)} (Quantumult X)", f"# Source: Rules Hub", ""]
             list_content.extend(qx_lines)
             out_file = QX_DIST / f"{rule_id}.list"
             with open(out_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(list_content) + "\n")
-    
-    # 2. Output full Quantumult X configuration profile (public safe template)
+
+    # 2. Output full Quantumult X configuration profile (public safe template, 无节点)
     qx = []
-    qx.append(f"# ===== Rules Hub Quantumult X Configuration =====")
+    qx.append("# ===== Rules Hub Quantumult X Configuration =====")
     qx.append(f"# Author: {config['meta']['author']}")
-    qx.append(f"# 结构借鉴 ddgksf2013 模块化标准，全端统一调度，无节点泄露")
+    qx.append("# 结构遵循 Quantumult X 官方段落规范，全端统一调度，无节点泄露")
+    qx.append("# 本文件为公开模板：导入后请在 [server_local] 填入你的节点，策略组会自动生效")
     qx.append("")
     qx.append("[general]")
     qx.append("excluded_routes=192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, 127.0.0.0/8")
-    qx.append('geo_location_checker=http://ip-api.com/json/?lang=zh-CN, ["countryCode"]')
     qx.append("server_check_url=http://connectivitycheck.gstatic.com/generate_204")
+    qx.append("server_check_timeout=3000")
     qx.append("")
     qx.append("[dns]")
     qx.append("no-ipv6")
@@ -301,61 +511,70 @@ def build_qx(config, rule_data):
     qx.append("server=/*.tencent.com/119.29.29.29")
     qx.append("server=/*.weixin.com/119.29.29.29")
     qx.append("")
+    qx.append("[policy]")
+    qx.append("# 策略组由 config.yaml 自动派生；无节点时全部回落到内置 proxy，保证可导入")
+    qx.extend(build_qx_policy_block(config, []))
+    qx.append("")
     qx.append("[server_local]")
-    qx.append("# 请在此填入本地 Shadowsocks 节点 (如 Lightsail 新加坡、甲骨文圣何塞)")
+    qx.append("# 在此填入本地节点，例如：")
+    qx.append("# shadowsocks=1.2.3.4:443, method=chacha20-ietf-poly1305, password=xxx, tag=Lightsail Singapore")
     qx.append("")
     qx.append("[server_remote]")
     qx.append("")
-    qx.append("[policy]")
-    qx.append("static=Claude, 狮城节点, Lightsail Singapore, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
-    qx.append("static=GoogleAI, 美国节点, Oracle San Jose, Google Oregon, 狮城节点, Lightsail Singapore, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
-    qx.append("static=WorkBuddy, 狮城节点, Lightsail Singapore, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
-    qx.append("static=国际媒体, 自动选择, 台湾节点, 香港节点, 狮城节点, 美国节点, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
-    qx.append("static=全球加速, 自动选择, direct, 狮城节点, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
-    qx.append("static=兜底分流, 自动选择, 全球加速, direct, 香港节点, 台湾节点, 日本节点, 狮城节点, 美国节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png")
-    qx.append("")
-    qx.append("url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png")
-    qx.append("url-latency-benchmark=美国节点, server-tag-regex=(?=.*(美|US|(?i)States|American))^((?!(港|台|日|韩|新)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png")
-    qx.append("url-latency-benchmark=香港节点, server-tag-regex=(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png")
-    qx.append("url-latency-benchmark=台湾节点, server-tag-regex=(?=.*(台|TW|(?i)Taiwan))^((?!(港|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png")
-    qx.append("url-latency-benchmark=日本节点, server-tag-regex=(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png")
-    qx.append("url-latency-benchmark=狮城节点, server-tag-regex=(?=.*(新|狮|獅|SG|(?i)Singapore))^((?!(港|台|日|韩|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png")
+    qx.append("[filter_local]")
+    qx.append("geoip, cn, direct")
+    qx.append("final, 兜底分流")
     qx.append("")
     qx.append("[filter_remote]")
     for r in config["rule_sources"]:
         rule_id = r["id"]
         target = r.get("target")
         force_target = map_target_to_qx(target)
-        desc = r.get("desc", rule_id)
         if "file" in r:
             qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
     qx.append("")
-    qx.append("[filter_local]")
-    qx.append("geoip, cn, direct")
-    qx.append("final, 兜底分流")
+    qx.append("[rewrite_local]")
     qx.append("")
     qx.append("[rewrite_remote]")
     for rw in config.get("rewrites", []):
         fn = rw["filename"]
+        if produced is not None and fn not in produced:
+            continue
         name = rw["name"]
         opt_str = str(rw.get("opt_parser", False)).lower()
         enb_str = str(rw.get("enabled", True)).lower()
         qx.append(f"{base_url}/qx/rewrites/{fn}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
-    
-    out_profile = QX_DIST / "profile.conf"
-    with open(out_profile, "w", encoding="utf-8") as f:
-        f.write("\n".join(qx) + "\n")
+    qx.append("")
+    qx.append("[task_local]")
+    qx.append("")
+    qx.append("[http_backend]")
+    qx.append("")
+    qx.append("[mitm]")
+    qx.append("skip_validating_cert = true")
+    qx.append("force_sni_domain_name = false")
+    qx.append("hostname = -*.fcbox.com, -*huami.com, -*amemv.com, -*snssdk.com, -www.google.com")
+    qx.append("")
+
+    text = "\n".join(qx) + "\n"
+    with open(QX_DIST / "profile.conf", "w", encoding="utf-8") as f:
+        f.write(text)
+    validate_qx_config(text, "dist/qx/profile.conf")
 
 
 def build_rewrites(config):
     """Compile, mirror, and self-host Quantumult X rewrites."""
     rw_dist = QX_DIST / "rewrites"
+    # 每次全量重建，避免已下线的源在 dist 里留下僵尸文件
+    if rw_dist.exists():
+        import shutil
+        shutil.rmtree(rw_dist)
     rw_dist.mkdir(parents=True, exist_ok=True)
     REWRITES_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
     
     rewrites = config.get("rewrites", [])
     all_hostnames = set()
+    produced = set()
     
     filter_remote_snippets = [
         "# ===== Rules Hub Quantumult X 远程分流订阅集合 (直接粘贴至 [filter_remote] 下) =====",
@@ -382,30 +601,28 @@ def build_rewrites(config):
         need_fetch = True
         if cache_file.exists():
             try:
-                import time
                 age = time.time() - os.path.getmtime(cache_file)
-                if age < 86400:  # 缓存 24 小时内直接命中，秒级极速构建
+                cached = read_text(cache_file)
+                # 只有内容合法时才允许命中缓存，避免把历史 HTML 脏数据一直带下去
+                if age < 86400 and valid_rewrite_payload(cached):
                     need_fetch = False
-                    with open(cache_file, "r", encoding="utf-8", errors="ignore") as cf:
-                        content = cf.read()
+                    content = cached
             except Exception:
                 pass
-                
+
         if need_fetch:
-            try:
-                raw = fetch_upstream(url, timeout=4)
-                if raw and len(raw) > 30:
-                    content = "\n".join(raw)
-                    with open(cache_file, "w", encoding="utf-8") as cf:
-                        cf.write(content)
-            except Exception:
-                pass
-            
-        if not content and cache_file.exists():
-            with open(cache_file, "r", encoding="utf-8", errors="ignore") as cf:
-                content = cf.read()
-            
+            raw_text = fetch_raw(url, timeout=8)
+            if raw_text and valid_rewrite_payload(raw_text):
+                content = raw_text
+                write_text(cache_file, content)
+            elif raw_text:
+                print(f"   ⚠️  [Rewrites] {rw_id}: 上游返回无效内容（HTML/跳转页），尝试沿用本地缓存")
+            if not content:
+                cached = read_text(cache_file)
+                content = cached if valid_rewrite_payload(cached) else ""
+
         if not content:
+            print(f"   ⚠️  [Rewrites] {rw_id}: 无可用内容，跳过（不生成空文件）")
             continue
             
         # Clean / rewrite script references inside JS files to point to self-hosted URLs
@@ -418,6 +635,7 @@ def build_rewrites(config):
         # Save to distribution
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
+        produced.add(fn)
             
         # Extract hostnames for all-in-one conf
         hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
@@ -469,138 +687,278 @@ def build_rewrites(config):
                 
     with open(rw_dist / "all.conf", "w", encoding="utf-8") as f:
         f.write("\n".join(aio) + "\n")
+    return produced
 
 
-def generate_personal_qx_config(config):
-    """If user's original QuantumultX input exists locally, generate a 100% loss-free personal configuration profile preserving MITM p12 certificate, passphrase, server_local nodes, and BoxJS."""
+def generate_personal_qx_config(config, produced=None):
+    """Rebuild a clean personal QX profile from user_qx_input.txt.
+
+    保留原始 [general]/[dns]/[server_local]/[server_remote]/[task_local]/[http_backend]/[mitm]
+    （节点、MITM 证书与口令零丢失），只重建策略组与分流/重写订阅，
+    并按 QX 官方段落规范输出，杜绝「缺少模块 [rewrite_local]」类导入错误。
+    """
     user_input_file = BASE_DIR / "user_qx_input.txt"
     if not user_input_file.exists():
         return
-        
+
     base_url = config["meta"]["base_url"]
-    with open(user_input_file, "r", encoding="utf-8") as f:
-        raw_text = f.read()
+    raw_text = read_text(user_input_file).replace("\r\n", "\n")
 
     def get_section(name):
-        m = re.search(r'\[' + name + r'\]\n(.*?)(?=\n\[|\Z)', raw_text, re.DOTALL)
-        return m.group(1).strip() if m else ''
+        m = re.search(r"^\[" + re.escape(name) + r"\]\s*\n(.*?)(?=^\[|\Z)",
+                      raw_text, re.MULTILINE | re.DOTALL)
+        return m.group(1).strip("\n") if m else ""
 
-    mitm_block = get_section("mitm")
+    general_block = get_section("general")
+    dns_block = get_section("dns")
     server_local_block = get_section("server_local")
     server_remote_block = get_section("server_remote")
     task_local_block = get_section("task_local")
     http_backend_block = get_section("http_backend")
-    
+    mitm_block = get_section("mitm")
+
+    # 只保留真实存在的节点标签，策略组据此生成，避免引用不存在的节点
+    node_tags = []
+    for line in server_local_block.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith(";"):
+            continue
+        m = re.search(r"(?:^|,)\s*tag\s*=\s*([^,]+)", s)
+        if m:
+            tag = m.group(1).strip()
+            if tag and tag not in node_tags:
+                node_tags.append(tag)
+
+    # 清理临时免费订阅（tag 含「临时」），避免几十个杂节点污染节点列表
+    cleaned_remote = []
+    dropped = 0
+    for line in server_remote_block.splitlines():
+        s = line.strip()
+        if s and not s.startswith("#") and not s.startswith(";") and "临时" in s:
+            cleaned_remote.append(f"; {line}  # 已由 Rules Hub 自动停用：临时免费订阅")
+            dropped += 1
+        else:
+            cleaned_remote.append(line)
+    server_remote_block = "\n".join(cleaned_remote)
+    if dropped:
+        print(f"   🧹 [QX] 已停用 {dropped} 条临时免费订阅，减少冗余节点")
+
     from datetime import datetime, timezone, timedelta
     tz_bj = timezone(timedelta(hours=8))
     gen_time = datetime.now(tz_bj).strftime("%Y-%m-%d %H:%M:%S")
 
     p = []
-    p.append("# ===== Quantumult X 个人专属定制配置文件 (防覆盖零丢失版) =====")
+    p.append("# ===== Quantumult X 个人专属定制配置 (零丢失 / 可导入版) =====")
     p.append(f"# 生成时间: {gen_time} (北京时间)")
-    p.append(f"# 规则与重写自托管服务: {base_url}")
-    p.append("# 特性: 已内嵌您的真实 MITM 根证书与口令、自建 VPS 节点、BoxJS 与全套自托管分流/重写")
-    p.append("# 提示: 导入此文件后，证书永不丢失，节点永不丢失，日常仅需在 QX 内更新分流与重写订阅即可！")
+    p.append(f"# 规则与重写自托管: {base_url}")
+    p.append(f"# 节点: {', '.join(node_tags) if node_tags else '(未检测到 server_local 节点)'}")
+    p.append("# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
     p.append("")
+
     p.append("[general]")
-    p.append("server_check_url=http://www.gstatic.com/generate_204")
-    p.append("server_check_timeout=3000")
-    p.append("profile_img_url=https://github.githubassets.com/images/modules/site/integrators/google.png")
-    p.append("geo_location_checker=disabled")
-    p.append("resource_parser_url=https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Scripts/resource-parser.js")
-    p.append("excluded_routes=239.255.255.250/32, 24.105.30.129/32, 185.60.112.157/32, 185.60.112.158/32, 182.162.132.1/32")
-    p.append("dns_exclusion_list=*.10099.com.cn, *.cmpassport.com, *.jegotrip.com.cn, *.icitymobile.mobi, id6.me, *.pingan.com.cn")
+    p.append(general_block if general_block else "server_check_url=http://www.gstatic.com/generate_204")
     p.append("")
+
     p.append("[dns]")
-    p.append("no-ipv6")
-    p.append("no-system")
-    p.append("server=223.5.5.5")
-    p.append("server=119.29.29.29")
-    p.append("server=1.1.1.1")
-    p.append("server=8.8.8.8")
-    p.append("server=/*.icloud.com/119.29.29.29")
-    p.append("server=/*.icloud.com.cn/119.29.29.29")
-    p.append("server=/*.tencent.com/119.29.29.29")
-    p.append("server=/*.weixin.com/119.29.29.29")
+    p.append(dns_block if dns_block else "no-ipv6\nno-system\nserver=223.5.5.5\nserver=119.29.29.29")
     p.append("")
+
+    p.append("[policy]")
+    p.append("# 由 config.yaml 自动派生：只引用真实存在的节点，导入不会报引用错误")
+    p.extend(build_qx_policy_block(config, node_tags))
+    p.append("")
+
     p.append("[server_local]")
     p.append(server_local_block)
     p.append("")
+
     p.append("[server_remote]")
     p.append(server_remote_block)
     p.append("")
-    p.append("[policy]")
-    p.append("# 1. 核心业务策略组")
-    p.append("static=Claude, 狮城节点, Lightsail Singapore, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Rabbit-Spec/Surge/Master/Conf/icon/Country-Singapore.png")
-    p.append("static=GoogleAI, 美国节点, Oracle San Jose, Google Oregon, 狮城节点, Lightsail Singapore, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png")
-    p.append("static=WorkBuddy, 狮城节点, Lightsail Singapore, direct, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png")
-    p.append("static=国际媒体, 自动选择, 台湾节点, 香港节点, 狮城节点, 美国节点, 全球加速, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png")
-    p.append("static=全球加速, 自动选择, direct, 狮城节点, 美国节点, 香港节点, 台湾节点, 日本节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png")
-    p.append("static=兜底分流, 自动选择, 全球加速, direct, 香港节点, 台湾节点, 日本节点, 狮城节点, 美国节点, proxy, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png")
+
+    p.append("[filter_local]")
+    p.append("# 局域网与保留地址直连")
+    for cidr in ("10.0.0.0/8", "127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/24"):
+        p.append(f"ip-cidr, {cidr}, direct")
+    p.append("# 国内 GeoIP 直连，其余走兜底")
+    p.append("geoip, cn, direct")
+    p.append("final, 兜底分流")
     p.append("")
-    p.append("# 2. 机场订阅智能正则策略组")
-    p.append("url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png")
-    p.append("url-latency-benchmark=美国节点, server-tag-regex=(?=.*(美|US|(?i)States|American))^((?!(港|台|日|韩|新)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/US.png")
-    p.append("url-latency-benchmark=香港节点, server-tag-regex=(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/HK.png")
-    p.append("url-latency-benchmark=台湾节点, server-tag-regex=(?=.*(台|TW|(?i)Taiwan))^((?!(港|日|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/TW.png")
-    p.append("url-latency-benchmark=日本节点, server-tag-regex=(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/JP.png")
-    p.append("url-latency-benchmark=狮城节点, server-tag-regex=(?=.*(新|狮|獅|SG|(?i)Singapore))^((?!(港|台|日|韩|美)).)*$, check-interval=900, tolerance=0, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/SG.png")
-    p.append("")
+
     p.append("[filter_remote]")
     for r in config.get("rule_sources", []):
         rule_id = r["id"]
         target = r.get("target")
         force_target = map_target_to_qx(target)
-        desc = r.get("desc", rule_id)
         if "file" in r:
             p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
     p.append("")
-    p.append("[filter_local]")
-    p.append("# 本地私有局域网直连")
-    p.append("ip-cidr, 10.0.0.0/8, direct")
-    p.append("ip-cidr, 127.0.0.0/8, direct")
-    p.append("ip-cidr, 172.16.0.0/12, direct")
-    p.append("ip-cidr, 192.168.0.0/16, direct")
-    p.append("ip-cidr, 224.0.0.0/24, direct")
-    p.append("ip-cidr, 182.254.116.0/24, direct")
+
+    p.append("[rewrite_local]")
     p.append("")
-    p.append("# 国内 GeoIP 精准直连与漏斗兜底")
-    p.append("geoip, cn, direct")
-    p.append("final, 兜底分流")
-    p.append("")
+
     p.append("[rewrite_remote]")
     for rw in config.get("rewrites", []):
         fn = rw["filename"]
+        if produced is not None and fn not in produced:
+            continue
         name = rw["name"]
         opt_str = str(rw.get("opt_parser", False)).lower()
         enb_str = str(rw.get("enabled", True)).lower()
         p.append(f"{base_url}/qx/rewrites/{fn}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
     p.append("")
+
     p.append("[task_local]")
     p.append(task_local_block)
     p.append("")
+
     p.append("[http_backend]")
     p.append(http_backend_block)
     p.append("")
+
     p.append("[mitm]")
     p.append(mitm_block)
     p.append("")
-    
+
+    text = "\n".join(p) + "\n"
     personal_conf_path = BASE_DIR / "QuantumultX_Personal.conf"
     with open(personal_conf_path, "w", encoding="utf-8") as out:
-        out.write("\n".join(p))
-    print(f"🔒 [Rules Hub] Generated personal profile: {personal_conf_path}")
+        out.write(text)
+    print(f"🔒 [Rules Hub] 个人配置已生成: {personal_conf_path}（节点 {len(node_tags)} 个）")
+    validate_qx_config(text, "QuantumultX_Personal.conf")
+
+
+ROUTER_SYNC_SH = r'''#!/bin/sh
+# ===== Rules Hub - fancyss 规则订阅同步 =====
+# 由 rules-hub 自动生成，请勿手工修改
+# 数据源: __BASE__/router
+BASE="__BASE__/router"
+RULES="/koolshare/ss/rules"
+TMP="/tmp/ruleshub_sync"
+LOG="/tmp/ruleshub_sync.log"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; echo "$*"; }
+
+[ -d "$RULES" ] || { echo "未检测到 fancyss 规则目录: $RULES"; exit 1; }
+mkdir -p "$TMP"
+
+fetch() {
+  _url="$1"; _out="$2"
+  wget --no-check-certificate --timeout=25 -qO "$_out" "$_url" || return 1
+  [ -s "$_out" ] || return 1
+  head -c 300 "$_out" | grep -qi "<html\|<!doctype" && return 1
+  return 0
+}
+
+same() { [ "$(md5sum "$1" | awk '{print $1}')" = "$(md5sum "$2" | awk '{print $1}')" ]; }
+
+changed=0
+
+if fetch "$BASE/chnroute.txt" "$TMP/chnroute.txt"; then
+  n=$(grep -c . "$TMP/chnroute.txt")
+  if [ "$n" -lt 1000 ]; then
+    log "chnroute.txt 条目异常($n)，放弃覆盖"
+  elif [ -f "$RULES/chnroute.txt" ] && same "$TMP/chnroute.txt" "$RULES/chnroute.txt"; then
+    log "chnroute.txt 已是最新 ($n 条)"
+  else
+    cp -f "$RULES/chnroute.txt" "$RULES/chnroute.txt.bak" 2>/dev/null
+    mv -f "$TMP/chnroute.txt" "$RULES/chnroute.txt"
+    log "chnroute.txt 已更新 ($n 条)"
+    changed=1
+  fi
+else
+  log "chnroute.txt 下载失败，保留原文件"
+fi
+
+if fetch "$BASE/gfwlist.conf" "$TMP/gfwlist.conf"; then
+  n=$(grep -c "ipset" "$TMP/gfwlist.conf")
+  if [ "$n" -lt 100 ]; then
+    log "gfwlist.conf 条目异常($n)，放弃覆盖"
+  elif [ -f "$RULES/gfwlist.conf" ] && same "$TMP/gfwlist.conf" "$RULES/gfwlist.conf"; then
+    log "gfwlist.conf 已是最新 ($n 条)"
+  else
+    cp -f "$RULES/gfwlist.conf" "$RULES/gfwlist.conf.bak" 2>/dev/null
+    mv -f "$TMP/gfwlist.conf" "$RULES/gfwlist.conf"
+    log "gfwlist.conf 已更新 ($n 条)"
+    changed=1
+  fi
+else
+  log "gfwlist.conf 下载失败，保留原文件"
+fi
+
+rm -rf "$TMP"
+
+if [ "$changed" = "1" ]; then
+  log "规则已变更，重启 shadowsocks 生效..."
+  dbus set ss_basic_action=1 2>/dev/null
+  sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
+  log "重启完成"
+else
+  log "无变更，跳过重启"
+fi
+log "同步结束"
+'''
+
+ROUTER_INSTALL_SH = r'''#!/bin/sh
+# ===== Rules Hub 软路由规则订阅 - 一键安装 =====
+# 用法: wget -qO- __BASE__/router/install.sh | sh
+BASE="__BASE__/router"
+DIR="/koolshare/scripts"
+RULES="/koolshare/ss/rules"
+CRON_LINE="__CRON__"
+
+echo "== Rules Hub 软路由规则订阅安装 =="
+[ -d "$RULES" ] || { echo "未检测到 fancyss ($RULES)，请先安装插件"; exit 1; }
+[ -d "$DIR" ] || DIR="/jffs/scripts"
+[ -d "$DIR" ] || { echo "未找到可写脚本目录"; exit 1; }
+
+wget --no-check-certificate --timeout=25 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
+grep -qi "<html" /tmp/ss_rule_sync.sh && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
+mv -f /tmp/ss_rule_sync.sh "$DIR/ss_rule_sync.sh"
+chmod +x "$DIR/ss_rule_sync.sh"
+echo "已安装: $DIR/ss_rule_sync.sh"
+
+if [ -f "$RULES/chnroute.txt" ] && [ ! -f "$RULES/chnroute.txt.orig" ]; then
+  cp -f "$RULES/chnroute.txt" "$RULES/chnroute.txt.orig"
+fi
+if [ -f "$RULES/gfwlist.conf" ] && [ ! -f "$RULES/gfwlist.conf.orig" ]; then
+  cp -f "$RULES/gfwlist.conf" "$RULES/gfwlist.conf.orig"
+fi
+
+if command -v cru >/dev/null 2>&1; then
+  cru d ruleshub_sync 2>/dev/null
+  cru a ruleshub_sync "$CRON_LINE $DIR/ss_rule_sync.sh"
+  echo "已设置定时任务: 每周日 04:10 自动同步"
+else
+  echo "警告: 未找到 cru，请手动在路由器计划任务中添加:"
+  echo "  $CRON_LINE $DIR/ss_rule_sync.sh"
+fi
+
+START="/jffs/scripts/services-start"
+if [ -d /jffs/scripts ]; then
+  touch "$START"
+  chmod +x "$START"
+  if ! grep -q "ruleshub_sync" "$START"; then
+    echo "cru a ruleshub_sync \"$CRON_LINE $DIR/ss_rule_sync.sh\"" >> "$START"
+  fi
+  echo "已写入开机自启: $START"
+fi
+
+echo "== 立即执行一次同步 =="
+"$DIR/ss_rule_sync.sh"
+'''
 
 
 def build_router(config, rule_data):
-    """Generate clean domain lists for Asuswrt-Merlin Shadowsocks plugin."""
+    """Generate router rule files + a self-hosted subscription with weekly auto-update."""
     ROUTER_DIST.mkdir(parents=True, exist_ok=True)
-    
+    base_url = config["meta"]["base_url"]
+
     # 1. Custom Whitelist (Always DIRECT on router)
     direct_lines = rule_data.get("rules/direct.txt", [])
     whitelist_domains = extract_domains_for_router(direct_lines)
-    
-    # 2. Custom Blacklist / GFWList (Always PROXY on router: Claude, GoogleAI, Media, OpenAI, TikTok, Proxy, etc.)
+
+    # 2. Custom Blacklist / GFWList (Always PROXY on router)
     proxy_lines = []
     for r in config.get("rule_sources", []):
         if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy", "Media", "Proxy"):
@@ -608,14 +966,61 @@ def build_router(config, rule_data):
             if rel_path and rel_path in rule_data:
                 proxy_lines.extend(rule_data[rel_path])
     blacklist_domains = extract_domains_for_router(proxy_lines)
-    
+
     with open(ROUTER_DIST / "merlin_whitelist.txt", "w", encoding="utf-8") as f:
         f.write("# 华硕梅林软路由 SS 插件自定义白名单域名 (直接复制到插件白名单中)\n")
         f.write("\n".join(whitelist_domains) + "\n")
-        
+
     with open(ROUTER_DIST / "merlin_blacklist.txt", "w", encoding="utf-8") as f:
         f.write("# 华硕梅林软路由 SS 插件自定义黑名单域名 (强制走代理)\n")
         f.write("\n".join(blacklist_domains) + "\n")
+
+    # 3. Fresh China CIDR list (replaces the 2015-era chnroute.txt on the router)
+    chnroute = load_cached_data(DATA_DIR / "chnroute.txt", CHNROUTE_URL,
+                                parse_cidr_list, 1000, "chnroute")
+    write_text(ROUTER_DIST / "chnroute.txt", "\n".join(chnroute) + "\n")
+
+    # 4. Fresh dnsmasq gfwlist (fancyss format) = upstream gfwlist + our proxy domains - whitelist
+    gfw = load_cached_data(DATA_DIR / "gfwlist.txt", GFWLIST_URL,
+                           parse_gfwlist_domains, 1000, "gfwlist")
+    merged = sorted((set(gfw) | set(blacklist_domains)) - set(whitelist_domains))
+    gfw_lines = ["# Rules Hub - fancyss gfwlist (auto-generated, do not edit)"]
+    for d in merged:
+        gfw_lines.append(f"server=/.{d}/127.0.0.1#7913")
+        gfw_lines.append(f"ipset=/.{d}/gfwlist")
+    write_text(ROUTER_DIST / "gfwlist.conf", "\n".join(gfw_lines) + "\n")
+
+    # 5. Subscription scripts
+    router_cfg = config.get("router", {}) or {}
+    cron_line = router_cfg.get("cron", "10 4 * * 0")
+    write_text(ROUTER_DIST / "ss_rule_sync.sh",
+               ROUTER_SYNC_SH.replace("__BASE__", base_url).replace("__CRON__", cron_line))
+    write_text(ROUTER_DIST / "install.sh",
+               ROUTER_INSTALL_SH.replace("__BASE__", base_url).replace("__CRON__", cron_line))
+
+    # 6. Human-readable manifest
+    from datetime import datetime, timezone, timedelta
+    gen_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+    manifest = [
+        "Rules Hub - 软路由规则订阅",
+        f"生成时间: {gen_time} (北京时间)",
+        f"订阅根地址: {base_url}/router",
+        "",
+        f"chnroute.txt      中国 IP 段 {len(chnroute)} 条（覆盖 2015 年老版本 5777 条）",
+        f"gfwlist.conf      代理域名 {len(merged)} 条（fancyss dnsmasq 格式）",
+        f"merlin_blacklist.txt  强制代理域名 {len(blacklist_domains)} 条",
+        f"merlin_whitelist.txt  强制直连域名 {len(whitelist_domains)} 条",
+        "",
+        "安装（路由器 SSH 执行）:",
+        f"  wget -qO- {base_url}/router/install.sh | sh",
+        "",
+        "安装后行为:",
+        "  - 立即同步一次",
+        "  - 每周日 04:10 自动同步（cru 定时任务，开机自动恢复）",
+        "  - 自动备份原文件为 *.orig / *.bak，可随时回滚",
+    ]
+    write_text(ROUTER_DIST / "README.txt", "\n".join(manifest) + "\n")
+    print(f"   ✅ [Router] chnroute {len(chnroute)} 条 / gfwlist {len(merged)} 条 / 订阅脚本已生成")
 
 
 def build_shadowrocket(config, rule_data):
@@ -1253,9 +1658,9 @@ def main():
     build_surge(config, rule_data)
     
     print("🔨 Generating Quantumult X configurations and rulesets...")
-    build_qx(config, rule_data)
-    build_rewrites(config)
-    generate_personal_qx_config(config)
+    produced = build_rewrites(config)
+    build_qx(config, rule_data, produced)
+    generate_personal_qx_config(config, produced)
     
     print("🔨 Generating Shadowrocket rulesets...")
     build_shadowrocket(config, rule_data)
