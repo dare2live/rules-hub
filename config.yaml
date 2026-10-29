@@ -1,0 +1,145 @@
+# rules-hub 配置文件
+# 单一数据源：在此定义策略组、规则集与目标映射，由生成器一键编译为 Surge、QX、小火箭、软路由配置
+
+meta:
+  name: "Rules Hub"
+  author: "dare2live"
+  base_url: "https://rules-hub.pages.dev"
+  managed_interval: 86400  # 自动同步刷新周期（秒）
+
+# 1. 核心业务策略组定义（全端统一收敛至 6 个黄金策略组）
+policies:
+  - name: "DIRECT"
+    type: "direct"
+    desc: "国内直连（微信、企业微信、钉钉、国内银行、内网）"
+
+  - name: "Claude"
+    type: "select"
+    desc: "Claude 专属通道（锁定新加坡）"
+    default_select: "🇸🇬 新加坡自动备用"
+    proxies:
+      - "Lightsail Singapore HY2"
+      - "Lightsail Singapore"
+      - "🇸🇬 新加坡自动备用"
+
+  - name: "GoogleAI"
+    type: "select"
+    desc: "Gemini / Antigravity 专属通道（美区优选/新加坡，杜绝香港）"
+    default_select: "🇺🇸 美国自动优选"
+    proxies:
+      - "🇺🇸 美国自动优选"
+      - "🇸🇬 新加坡自动备用"
+      - "Oracle San Jose"
+      - "Lightsail Singapore HY2"
+      - "Proxy"
+
+  - name: "WorkBuddy"
+    type: "select"
+    desc: "腾讯 WorkBuddy AI 加速通道"
+    default_select: "🇸🇬 新加坡自动备用"
+    proxies:
+      - "🇸🇬 新加坡自动备用"
+      - "Proxy"
+      - "DIRECT"
+
+  - name: "Proxy"
+    type: "select"
+    desc: "全球通用外网加速（X、GitHub、Google 搜索）"
+    default_select: "🇸🇬 新加坡自动备用"
+    proxies:
+      - "🇸🇬 新加坡自动备用"
+      - "🇺🇸 美国自动优选"
+      - "Lightsail Singapore HY2"
+      - "Oracle San Jose"
+      - "Google Oregon"
+      - "Lightsail Singapore"
+
+  - name: "Media"
+    type: "select"
+    desc: "国际流媒体（YouTube、Netflix、Spotify）"
+    default_select: "🇸🇬 新加坡自动备用"
+    proxies:
+      - "🇸🇬 新加坡自动备用"
+      - "🇺🇸 美国自动优选"
+      - "Proxy"
+
+  - name: "REJECT"
+    type: "reject"
+    desc: "广告与隐私追踪拦截"
+
+# 2. 自动化容灾与健康检查节点池
+fallback_groups:
+  - name: "🇸🇬 新加坡自动备用"
+    type: "fallback"
+    test_url: "http://connectivitycheck.gstatic.com/generate_204"
+    interval: 30
+    tolerance: 50
+    proxies:
+      - "Lightsail Singapore HY2"
+      - "Lightsail Singapore"
+
+  - name: "🇺🇸 美国自动优选"
+    type: "url-test"
+    test_url: "http://connectivitycheck.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+    proxies:
+      - "Oracle San Jose"
+      - "Google Oregon"
+
+# 3. 规则分类与策略映射
+rule_sources:
+  - id: "unbreak"
+    target: "DIRECT"
+    file: "rules/unbreak.txt"
+    desc: "防误杀白名单（高优先级）"
+
+  - id: "custom_direct"
+    target: "DIRECT"
+    file: "rules/direct.txt"
+    desc: "个人专属项目直连、微信、企业微信"
+
+  - id: "claude"
+    target: "Claude"
+    file: "rules/claude.txt"
+    desc: "Claude & Anthropic 全生态"
+    process:
+      - "Claude"
+
+  - id: "google_ai"
+    target: "GoogleAI"
+    file: "rules/google-ai.txt"
+    desc: "Gemini / Antigravity / Google Cloud Code"
+    process:
+      - "Gemini"
+      - "agy"
+      - "GeminiAppLauncher"
+
+  - id: "workbuddy"
+    target: "WorkBuddy"
+    file: "rules/workbuddy.txt"
+    desc: "腾讯 WorkBuddy AI"
+    process:
+      - "WorkBuddy AI"
+      - "codebuddy"
+
+  - id: "media"
+    target: "Media"
+    file: "rules/media.txt"
+    desc: "主流海外流媒体服务"
+
+  - id: "reject"
+    target: "REJECT"
+    file: "rules/reject.txt"
+    desc: "广告与数据分析追踪"
+
+  - id: "china_geoip"
+    target: "DIRECT"
+    type: "GEOIP"
+    country: "CN"
+    desc: "国内 IP GeoIP 精准直连"
+
+  - id: "final"
+    target: "Proxy"
+    type: "FINAL"
+    desc: "外网漏斗兜底"

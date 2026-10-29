@@ -1,0 +1,7 @@
+# 防误杀白名单（修正可能被广告规则拦截的正常功能域名）
+DOMAIN,app.adjust.com
+DOMAIN,analytics.slashdotmedia.com
+DOMAIN,app.appsflyer.com
+DOMAIN-SUFFIX,apple.com
+DOMAIN-SUFFIX,icloud.com
+DOMAIN-SUFFIX,crashlytics.com

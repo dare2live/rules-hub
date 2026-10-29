@@ -1,0 +1,7 @@
+# Claude & Anthropic 全生态域名
+DOMAIN-SUFFIX,claude.ai
+DOMAIN-SUFFIX,claude.com
+DOMAIN-SUFFIX,clau.de
+DOMAIN-SUFFIX,claudeusercontent.com
+DOMAIN-SUFFIX,anthropic.com
+DOMAIN,cdn.usefathom.com

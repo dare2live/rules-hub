@@ -1,0 +1,5 @@
+# 腾讯 WorkBuddy AI & CodeBuddy
+DOMAIN-SUFFIX,workbuddy.ai
+DOMAIN-SUFFIX,codebuddy.cn
+DOMAIN-KEYWORD,workbuddy
+DOMAIN-KEYWORD,codebuddy

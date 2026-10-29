@@ -1,0 +1,42 @@
+# 个人项目直连
+DOMAIN,sharewithyou.dpdns.org
+DOMAIN-SUFFIX,lifehackers.cc
+
+# 微信 / 企业微信 / 腾讯系办公直连
+DOMAIN-SUFFIX,weixin.qq.com
+DOMAIN-SUFFIX,qpic.cn
+DOMAIN-SUFFIX,wechat.com
+DOMAIN-SUFFIX,work.weixin.qq.com
+DOMAIN-SUFFIX,qyapi.weixin.qq.com
+DOMAIN-SUFFIX,mail.qq.com
+DOMAIN-SUFFIX,tencent.com
+DOMAIN-SUFFIX,qq.com
+
+# 钉钉 / 阿里办公 / 飞书
+DOMAIN-SUFFIX,dingtalk.com
+DOMAIN-SUFFIX,dingtalkapps.com
+DOMAIN-SUFFIX,alipay.com
+DOMAIN-SUFFIX,alipayobjects.com
+DOMAIN-SUFFIX,taobao.com
+DOMAIN-SUFFIX,tmall.com
+DOMAIN-SUFFIX,feishu.cn
+DOMAIN-SUFFIX,larksuite.com
+
+# 国内主流银行与金融
+DOMAIN-SUFFIX,95588.com
+DOMAIN-SUFFIX,icbc.com.cn
+DOMAIN-SUFFIX,ccb.com
+DOMAIN-SUFFIX,ccb.com.cn
+DOMAIN-SUFFIX,boc.cn
+DOMAIN-SUFFIX,abchina.com
+DOMAIN-SUFFIX,bankcomm.com
+DOMAIN-SUFFIX,cmbchina.com
+DOMAIN-SUFFIX,12306.cn
+
+# 苹果 / 微软直连加速（更新、时钟、国内 CDN）
+DOMAIN-SUFFIX,apple.com.cn
+DOMAIN-SUFFIX,icloud.com.cn
+DOMAIN,time.apple.com
+DOMAIN,time.asia.apple.com
+DOMAIN-SUFFIX,msftncsi.com
+DOMAIN-SUFFIX,msftconnecttest.com

@@ -1,0 +1,16 @@
+# 常见广告、跟踪与隐私窃取域名拦截
+DOMAIN-SUFFIX,doubleclick.net
+DOMAIN-SUFFIX,googleadservices.com
+DOMAIN-SUFFIX,googlesyndication.com
+DOMAIN-SUFFIX,adservice.google.com
+DOMAIN-SUFFIX,adcolony.com
+DOMAIN-SUFFIX,unityads.unity3d.com
+DOMAIN-SUFFIX,vungle.com
+DOMAIN-SUFFIX,appsflyer.com
+DOMAIN-SUFFIX,applovin.com
+DOMAIN-SUFFIX,umeng.com
+DOMAIN-SUFFIX,crashlytics.com
+DOMAIN-SUFFIX,adjust.com
+DOMAIN-SUFFIX,branch.io
+DOMAIN,log.byteoversea.com
+DOMAIN,ad.api.3g.youku.com

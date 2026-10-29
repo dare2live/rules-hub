@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output artifacts
+dist/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Sensitive local context & memo (Do not push to public repo)
+PROJECT_CONTEXT.md
+*.local.md
