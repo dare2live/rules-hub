@@ -47,6 +47,113 @@ GFWLIST_URL = "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.
 CDN_URL = "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
 DATA_MAX_AGE = 7 * 86400
 
+# build_rewrites() 推导出的 MITM 主机清单，供 build_qx / generate_personal_qx_config 复用
+QX_MITM_STATE = {"hosts": []}
+
+# ===== MITM 主机推导 =====
+# QX 的 [mitm] hostname 必须写明要解密哪些主机，重写才会生效。
+# 上游重写文件里绝大多数是裸规则（没有 hostname 行），所以这里从规则本身反推。
+# 只解密「确实有重写规则」的主机，比无脑 MITM 全网更省电、也更不容易搞坏证书校验。
+MITM_HOST_RE = re.compile(
+    r"^(?:\*\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$"
+)
+MITM_MULTI_TLD = (
+    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
+    "co.uk", "com.hk", "com.tw", "co.jp", "com.sg",
+)
+# 正则写法无法机械转换时的映射
+MITM_OVERRIDES = {
+    r".*\.xima\..*\.com": ["*.ximalaya.com"],
+    r"xima\..*\.com": ["*.ximalaya.com"],
+    r".*flyert.*": ["*.flyert.com"],
+    r".*zhijianmedia\.cn": ["*.zhijianmedia.cn"],
+}
+# 绝不 MITM：银行 / 支付 / 政务 / 苹果系统服务。
+# 宁可少去这几个广告，也不要让 App 因为证书校验失败而报错。
+MITM_DENY_SUFFIX = (
+    "bankcomm.com", "bankcomm.cn", "ccb.com", "ecitic.com", "pingan.com",
+    "spdb.com.cn", "nhsa.gov.cn", "icbc.com.cn", "abchina.com", "boc.cn",
+    "cmbchina.com", "unionpay.com", "95516.com", "alipay.com", "tenpay.com",
+    "apple.com", "icloud.com",
+)
+# 公网后缀本身不能当通配目标（否则等于 MITM 整个 .com.cn）
+MITM_DENY_EXACT = {"*.com.cn", "*.net.cn", "*.org.cn", "*.gov.cn", "*.com", "*.cn"}
+
+
+def _expand_alternation(host):
+    """展开 (a|b|c) 形式的简单交替组，最多 16 种。"""
+    m = re.search(r"\(([^()]*\|[^()]*)\)", host)
+    if not m:
+        return [host]
+    alts = m.group(1).split("|")
+    if not all(re.fullmatch(r"[A-Za-z0-9.\-]+", a) for a in alts):
+        return [host[: m.start()] + host[m.end():]]
+    out = []
+    for a in alts:
+        out.extend(_expand_alternation(host[: m.start()] + a + host[m.end():]))
+    return out[:16]
+
+
+def _host_to_mitm(host):
+    """把规则里的 host 片段转成 [mitm] hostname 条目（0 或 1 条）。"""
+    h = host.replace(r"\.", ".").replace(r"\-", "-").replace("\\", "").strip(".")
+    if h in MITM_OVERRIDES:
+        return MITM_OVERRIDES[h]
+    if MITM_HOST_RE.fullmatch(h):
+        return [h]
+    # 含正则元字符：从右往左取连续的纯字母数字标签，作为域名后缀
+    keep = []
+    for lab in reversed(h.split(".")):
+        if re.fullmatch(r"[A-Za-z0-9\-]+", lab):
+            keep.insert(0, lab)
+        else:
+            break
+    if len(keep) < 2:
+        return []
+    n = 3 if ".".join(keep[-2:]) in MITM_MULTI_TLD and len(keep) >= 3 else 2
+    suffix = ".".join(keep[-n:])
+    if not re.fullmatch(r"(?:[A-Za-z0-9\-]+\.)+[A-Za-z]{2,24}", suffix):
+        return []
+    return ["*." + suffix]
+
+
+def derive_mitm_hostnames(paths):
+    """从一组重写文件里反推需要 MITM 的主机清单。"""
+    hosts = set()
+    for p in paths:
+        try:
+            text = Path(p).read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for line in text.splitlines():
+            s = line.strip()
+            if " url " not in s or s.startswith("#") or s.startswith("//"):
+                continue
+            left = s.split(" url ")[0]
+            m = re.match(r"^\^https\?:\\/\\/(.*)$", left)
+            if not m:
+                continue
+            rest = m.group(1)
+            idx = rest.find("\\/")
+            raw = rest[:idx] if idx > 0 else rest
+            for item in _expand_alternation(raw):
+                hosts.update(_host_to_mitm(item))
+
+    hosts = {h for h in hosts
+             if not any(h.lstrip("*.").endswith(sfx) for sfx in MITM_DENY_SUFFIX)}
+    hosts -= MITM_DENY_EXACT
+
+    # 收敛：已经有 *.foo.com 就不再单列 a.foo.com
+    wild = {h for h in hosts if h.startswith("*.")}
+    out = set(wild)
+    for h in hosts:
+        if h.startswith("*."):
+            continue
+        parts = h.split(".")
+        if not any("*." + ".".join(parts[i:]) in wild for i in range(1, len(parts))):
+            out.add(h)
+    return sorted(out)
+
 
 def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -485,6 +592,94 @@ def validate_qx_config(text, label):
     return problems
 
 
+# ===== 自检页：用来判断 MITM / 重写到底有没有生效 =====
+# 没有这一步，用户只能靠"广告还在不在"猜，而广告有没有是多个原因叠加的结果。
+# 这里放一条只作用于自己站点的重写：打开页面看到绿色横幅 = MITM 通、脚本执行通。
+SELFTEST_JS = r'''/*
+ * Rules Hub 重写自检脚本
+ * 只作用于 https://<base_url>/qx/selftest.html
+ * 作用：在页面顶部插入一条横幅，证明 MITM 与脚本执行链路是通的
+ */
+const body = $response.body || "";
+const banner = [
+  '<div style="position:fixed;top:0;left:0;right:0;z-index:99999;',
+  'background:#16a34a;color:#fff;font:600 15px/1.6 -apple-system,sans-serif;',
+  'padding:14px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">',
+  '✅ 重写已生效（MITM 正常）</div>'
+].join("");
+let out;
+if (body.indexOf("</body>") !== -1) {
+  out = body.replace("</body>", banner + "</body>");
+} else {
+  out = banner + body;
+}
+$done({ body: out });
+'''
+
+
+def build_qx_selftest_rules(base_url):
+    """生成 rewrite_local 里的自检规则，并落盘对应的 JS。"""
+    parsed = re.sub(r"^https?://", "", base_url).strip("/")
+    host = parsed.split("/")[0]
+    prefix = parsed[len(host):].strip("/")
+    rw_dir = QX_DIST / "rewrites"
+    rw_dir.mkdir(parents=True, exist_ok=True)
+    (rw_dir / "selftest.js").write_text(SELFTEST_JS, encoding="utf-8")
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rules Hub 重写自检</title>
+<style>
+  body{{margin:0;padding:56px 20px 40px;font:16px/1.7 -apple-system,"PingFang SC",sans-serif;
+       background:#0f172a;color:#e2e8f0}}
+  h1{{font-size:20px;margin:0 0 8px}}
+  .sub{{color:#94a3b8;font-size:14px;margin-bottom:24px}}
+  .card{{background:#1e293b;border-radius:12px;padding:16px 18px;margin-bottom:14px}}
+  .ok{{color:#4ade80;font-weight:600}}
+  .bad{{color:#f87171;font-weight:600}}
+  code{{background:#0b1220;padding:2px 6px;border-radius:4px;font-size:13px}}
+  ol{{padding-left:20px;margin:8px 0 0}}
+  li{{margin-bottom:6px}}
+</style>
+</head>
+<body>
+<h1>Rules Hub 重写自检</h1>
+<div class="sub">这个页面只有一个用途：告诉你 Quantumult X 的重写链路是否正常。</div>
+
+<div class="card">
+  <div>页面顶部如果出现<span class="ok">绿色横幅</span> → MITM 与脚本执行都正常，重写规则可以生效。</div>
+  <div>没有横幅 → 重写没跑起来，去广告自然也不会生效。</div>
+</div>
+
+<div class="card">
+  <strong>没有横幅时，按顺序检查：</strong>
+  <ol>
+    <li>Quantumult X → 设置 → <code>MITM</code> → 证书是否已安装、并在「设置 → 通用 → 关于本机 → 证书信任设置」里打开完全信任</li>
+    <li>本配置的 <code>[mitm]</code> 里 <code>hostname</code> 是否包含本页域名</li>
+    <li>重写总开关是否打开；<code>[rewrite_remote]</code> 里的条目是否处于启用状态</li>
+    <li>把本配置删掉重新导入一次（QX 有时会缓存旧的重写文件）</li>
+  </ol>
+</div>
+
+<div class="card">
+  <strong>参数</strong><br>
+  生成时间：{time.strftime("%Y-%m-%d %H:%M")}<br>
+  配置源：<code>{base_url}</code>
+</div>
+</body>
+</html>
+"""
+    (QX_DIST / "selftest.html").write_text(html, encoding="utf-8")
+
+    esc_host = host.replace(".", r"\.")
+    path_part = ("/" + prefix if prefix else "") + "/qx/selftest"
+    esc_path = path_part.replace("/", r"\/")
+    return [f"^https?:\\/\\/{esc_host}{esc_path} url script-response-body {base_url}/qx/rewrites/selftest.js"]
+
+
 def build_qx(config, rule_data, produced=None):
     QX_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
@@ -554,6 +749,7 @@ def build_qx(config, rule_data, produced=None):
             qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
     qx.append("")
     qx.append("[rewrite_local]")
+    qx.extend(build_qx_selftest_rules(base_url))
     qx.append("")
     qx.append("[rewrite_remote]")
     for rw in config.get("rewrites", []):
@@ -572,7 +768,11 @@ def build_qx(config, rule_data, produced=None):
     qx.append("[mitm]")
     qx.append("skip_validating_cert = true")
     qx.append("force_sni_domain_name = false")
-    qx.append("hostname = -*.fcbox.com, -*huami.com, -*amemv.com, -*snssdk.com, -www.google.com")
+    mitm_hosts = QX_MITM_STATE.get("hosts") or []
+    # 注意：QX 的 hostname 只认 * 和 ? 通配符，不支持 "-" 排除语法。
+    # 早期配置里那串 "-*.fcbox.com, -*huami.com, ..." 全是无效条目，
+    # 等于 hostname 列表匹配不到任何主机 —— 这就是重写长期静默失效的根因。
+    qx.append(f"hostname = {', '.join(mitm_hosts)}" if mitm_hosts else "hostname =")
     qx.append("")
 
     text = "\n".join(qx) + "\n"
@@ -611,15 +811,29 @@ def build_rewrites(config):
         rw_id = rw["id"]
         name = rw["name"]
         fn = rw["filename"]
-        url = rw["upstream_url"]
+        local_rel = rw.get("local_file")
+        url = rw.get("upstream_url", "")
         opt_parser = rw.get("opt_parser", False)
         enabled = rw.get("enabled", True)
         cache_file = REWRITES_CACHE_DIR / fn
         dest_file = rw_dist / fn
-        
+
         content = ""
-        need_fetch = True
-        if cache_file.exists():
+        if local_rel:
+            # 本地维护的重写：不抓上游、不走缓存，改完重新构建即可
+            local_path = BASE_DIR / local_rel
+            if not local_path.exists():
+                print(f"   ⚠️  [Rewrites] {rw_id}: 本地文件不存在 {local_rel}，跳过")
+                continue
+            content = read_text(local_path)
+            if not valid_rewrite_payload(content):
+                print(f"   ⚠️  [Rewrites] {rw_id}: 本地文件内容无效，跳过")
+                continue
+            need_fetch = False
+        else:
+            need_fetch = True
+
+        if not local_rel and cache_file.exists():
             try:
                 age = time.time() - os.path.getmtime(cache_file)
                 cached = read_text(cache_file)
@@ -647,23 +861,25 @@ def build_rewrites(config):
             
         # Clean / rewrite script references inside JS files to point to self-hosted URLs
         self_hosted_url = f"{base_url}/qx/rewrites/{fn}"
-        content = content.replace(url, self_hosted_url)
-        if "raw.githubusercontent.com" in url:
-            gh_raw_alt = url.replace("https://raw.githubusercontent.com/", "https://github.com/").replace("/refs/heads/", "/raw/")
-            content = content.replace(gh_raw_alt, self_hosted_url)
+        if url:
+            content = content.replace(url, self_hosted_url)
+            if "raw.githubusercontent.com" in url:
+                gh_raw_alt = url.replace("https://raw.githubusercontent.com/", "https://github.com/").replace("/refs/heads/", "/raw/")
+                content = content.replace(gh_raw_alt, self_hosted_url)
             
         # Save to distribution
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
         produced.add(fn)
             
-        # Extract hostnames for all-in-one conf
-        hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
-        for hn_str in hn_matches:
-            for h in hn_str.split(","):
-                h = h.strip()
-                if h:
-                    all_hostnames.add(h)
+        # Extract hostnames for all-in-one conf（仅启用的重写才需要 MITM）
+        if enabled:
+            hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
+            for hn_str in hn_matches:
+                for h in hn_str.split(","):
+                    h = h.strip()
+                    if h:
+                        all_hostnames.add(h)
                     
         opt_str = str(opt_parser).lower()
         enb_str = str(enabled).lower()
@@ -683,13 +899,32 @@ def build_rewrites(config):
             
     with open(QX_DIST / "filter_remote.snippet", "w", encoding="utf-8") as f:
         f.write("\n".join(filter_remote_snippets) + "\n")
-        
+
+    # ===== 推导 [mitm] hostname =====
+    # 上游重写文件基本都是裸规则，没有 hostname 行；不反推的话 MITM 列表是空的，
+    # 所有 HTTPS 重写都会静默失效（导入不报错，只是没效果）。
+    enabled_paths = [
+        rw_dist / rw["filename"] for rw in rewrites
+        if rw.get("enabled", True) and (rw_dist / rw["filename"]).exists()
+    ]
+    derived = derive_mitm_hostnames(enabled_paths)
+    declared = {h for h in all_hostnames if MITM_HOST_RE.fullmatch(h.strip())}
+    # 自检页所在域名必须被 MITM，否则自检永远看不到横幅
+    selftest_host = re.sub(r"^https?://", "", base_url).split("/")[0]
+    if MITM_HOST_RE.fullmatch(selftest_host):
+        declared.add(selftest_host)
+    mitm_hosts = sorted(set(derived) | declared)
+    QX_MITM_STATE["hosts"] = mitm_hosts
+    print(f"   🔐 [MITM] 从 {len(enabled_paths)} 个重写文件推导出 {len(mitm_hosts)} 条 hostname")
+    if not mitm_hosts:
+        print("   ⚠️  [MITM] hostname 为空，HTTPS 重写将全部失效")
+
     # Build All-in-One rewrite conf (combining active conf rewrites)
     aio = [
         "# ===== Rules Hub Quantumult X All-In-One Unified Rewrites =====",
         f"# Auto-synced daily at 04:00: {base_url}",
         "",
-        f"hostname = {', '.join(sorted(list(all_hostnames)))}",
+        f"hostname = {', '.join(mitm_hosts)}",
         ""
     ]
     for rw in rewrites:
@@ -793,6 +1028,17 @@ def generate_personal_qx_config(config, produced=None):
     http_backend_block = get_section("http_backend")
     mitm_block = get_section("mitm")
 
+    # 原始输入里的 hostname 是 "-*.fcbox.com" 这种无效写法（QX 不支持 - 排除），
+    # 等于没配 —— 用推导出来的清单整段替换掉。证书相关的 passphrase / p12 原样保留。
+    _mitm_hosts = QX_MITM_STATE.get("hosts") or []
+    if _mitm_hosts:
+        _new_hn = f"hostname = {', '.join(_mitm_hosts)}"
+        if re.search(r"^hostname\s*=.*$", mitm_block, flags=re.MULTILINE):
+            mitm_block = re.sub(r"^hostname\s*=.*$", _new_hn, mitm_block,
+                                count=1, flags=re.MULTILINE)
+        else:
+            mitm_block = mitm_block.rstrip("\n") + "\n\n" + _new_hn
+
     # 只保留真实存在的节点标签，策略组据此生成，避免引用不存在的节点
     node_tags = []
     for line in server_local_block.splitlines():
@@ -879,6 +1125,7 @@ def generate_personal_qx_config(config, produced=None):
     p.append("")
 
     p.append("[rewrite_local]")
+    p.extend(build_qx_selftest_rules(base_url))
     p.append("")
 
     p.append("[rewrite_remote]")
