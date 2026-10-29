@@ -533,7 +533,7 @@ def build_web_admin(config):
           </div>
           <p class="card-desc">小火箭远程配置订阅，支持直接订阅规则集或全量配置模板，完美兼容 Hysteria 2 与 Shadowsocks。</p>
         </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/shadowrocket/Claude.list')">
+        <button class="copy-btn" onclick="copyLink('{base_url}/shadowrocket/claude.list')">
           📋 复制小火箭规则集
         </button>
       </div>
