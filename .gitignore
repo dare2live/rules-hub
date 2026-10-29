@@ -20,3 +20,6 @@ user_qx_input.txt
 
 # Local agent workspace (memory / session data)
 .workbuddy-ai/
+
+# 路由器配置备份（含密码与密钥，绝不入库）
+backups/
