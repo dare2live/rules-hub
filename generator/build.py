@@ -957,7 +957,7 @@ echo "== Rules Hub 软路由规则订阅安装 =="
 [ -d "$DIR" ] || { echo "未找到可写脚本目录"; exit 1; }
 
 wget --no-check-certificate --timeout=30 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
-grep -qi "<html" /tmp/ss_rule_sync.sh && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
+head -c 300 /tmp/ss_rule_sync.sh | grep -qi "<!doctype\|<html" && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
 mv -f /tmp/ss_rule_sync.sh "$DIR/ss_rule_sync.sh"
 chmod +x "$DIR/ss_rule_sync.sh"
 echo "已安装: $DIR/ss_rule_sync.sh"
