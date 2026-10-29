@@ -7,6 +7,13 @@ meta:
   base_url: "https://dare2live.github.io/rules-hub"  # 默认使用原生免配置的 GitHub Pages（也可换为 Cloudflare Pages: https://rules-hub.pages.dev）
   managed_interval: 86400  # 自动同步刷新周期（秒）
 
+# 软路由（华硕梅林 fancyss）订阅与自动更新
+router:
+  # 每周日 04:10 自动同步（cron 语法，5 段）
+  cron: "10 4 * * 0"
+  # chnroute / gfwlist 上游数据刷新周期（天），编译时超过该天数会重新拉取
+  data_refresh_days: 7
+
 # 1. 核心业务策略组定义（全端统一收敛至 6 个黄金策略组）
 policies:
   - name: "DIRECT"
@@ -181,8 +188,8 @@ rewrites:
     filename: "StartUpAds.conf"
     upstream_url: "https://ddgksf2013.top/rewrite/StartUpAds.conf"
     opt_parser: false
-    enabled: true
-    desc: "全网主流应用开屏广告拦截"
+    enabled: false
+    desc: "已停用：ddgksf2013.top 对该路径返回 302 跳首页，源文件已下架"
 
   - id: "youtube_ads"
     name: "油管去广告@Maasea"
@@ -225,20 +232,20 @@ rewrites:
     desc: "微信小程序广告与激励广告净化"
 
   - id: "xiaohongshu_ads"
-    name: "小红书净化+去水印@ddgksf2013"
+    name: "小红书净化+去水印@奶思"
     filename: "XiaoHongShuAds.conf"
-    upstream_url: "https://ddgksf2013.top/rewrite/XiaoHongShuAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/QuantumultX/rewrite/split/partX/Xiaohongshu.snippet"
     opt_parser: false
     enabled: true
-    desc: "小红书瀑布流广告拦截与无水印原图保存"
+    desc: "小红书瀑布流广告拦截与无水印原图保存（已迁移至 wool_scripts 维护源）"
 
   - id: "xueqiu_ads"
-    name: "雪球净化"
+    name: "雪球净化@奶思"
     filename: "XueQiuAds.conf"
-    upstream_url: "https://ddgksf2013.top/rewrite/XueQiuAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/QuantumultX/rewrite/split/partX/XueQiu.snippet"
     opt_parser: false
     enabled: true
-    desc: "雪球开屏与社区推广信息净化"
+    desc: "雪球开屏与社区推广信息净化（已迁移至 wool_scripts 维护源）"
 
   - id: "goofish_ads"
     name: "闲鱼净化"
@@ -302,8 +309,8 @@ rewrites:
     filename: "missav.ads.js"
     upstream_url: "https://ddgksf2013.top/scripts/missav.ads.js"
     opt_parser: true
-    enabled: true
-    desc: "MissAV 网页去广告与播放增强"
+    enabled: false
+    desc: "已停用：ddgksf2013.top 对该路径返回 302 跳首页，源脚本已下架"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   - id: "caiyun_ads"

@@ -80,10 +80,14 @@ DOMAIN,sdkapp.uve.weibo.com
 DOMAIN-SUFFIX,ddgksf2013.top
 
 # 比亚迪 (BYD) 车联、车机与云服务直连
+# 说明：BYD App 会轮换使用多个云端域名，且对出口 IP 地区敏感，
+# 一旦被代理到境外会直接返回「网络错误」，因此这里做全量兜底直连。
 DOMAIN-SUFFIX,byd.com
 DOMAIN-SUFFIX,byd.com.cn
 DOMAIN-SUFFIX,bydauto.com
 DOMAIN-SUFFIX,bydauto.com.cn
+DOMAIN-SUFFIX,bydauto.cn
+DOMAIN-SUFFIX,bydauto.net
 DOMAIN-SUFFIX,bydcloud.com
 DOMAIN-SUFFIX,byd-auto.net
 DOMAIN-SUFFIX,bydclub.com
@@ -95,4 +99,15 @@ DOMAIN-SUFFIX,bydowstar.com
 DOMAIN-SUFFIX,bydenergy.com
 DOMAIN-SUFFIX,bydservice.com
 DOMAIN-SUFFIX,bydservice.com.cn
+DOMAIN-SUFFIX,bydglobal.com
+DOMAIN-SUFFIX,bydmobile.com
+DOMAIN-SUFFIX,bydlife.com
+DOMAIN-SUFFIX,bydfin.com
+DOMAIN-SUFFIX,dilink.com
+DOMAIN-SUFFIX,diplus.cn
+DOMAIN-KEYWORD,bydauto
+DOMAIN-KEYWORD,bydcloud
+DOMAIN-KEYWORD,bydservice
+# 兜底：任何含 byd 的域名一律直连（BYD App 动态域名较多）
+DOMAIN-KEYWORD,byd
 

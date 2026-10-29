@@ -17,3 +17,6 @@ user_qx_input.txt
 *personal*.conf
 *Personal*.conf
 *.p12
+
+# Local agent workspace (memory / session data)
+.workbuddy-ai/
