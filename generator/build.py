@@ -853,6 +853,8 @@ ROUTER_SYNC_SH = r'''#!/bin/sh
 # 由 rules-hub 自动生成，请勿手工修改
 # 订阅源: __BASE__/router/fancyss
 BASE="__BASE__/router/fancyss"
+# 备用源（jsDelivr 读 gh-pages 分支），主源失败时自动回退；留空则关闭
+BASE_BAK="__BASE_BAK_SUB__"
 RULES="/koolshare/ss/rules"
 TMP="/tmp/ruleshub_sync"
 LOG="/tmp/ruleshub_sync.log"
@@ -862,22 +864,33 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; echo "$*"; }
 [ -d "$RULES" ] || { echo "未检测到 fancyss 规则目录: $RULES"; exit 1; }
 mkdir -p "$TMP"
 
+# fetch <相对路径> <输出文件>
+# 依次尝试 BASE / BASE_BAK，任一成功即返回 0。
+# 下载到 HTML（GitHub Pages 404 页 / 劫持页）视为失败，自动换下一个源。
 fetch() {
-  wget --no-check-certificate --timeout=30 -qO "$2" "$1" || return 1
-  [ -s "$2" ] || return 1
-  head -c 300 "$2" | grep -qi "<html\|<!doctype" && return 1
-  return 0
+  _rel="$1"; _out="$2"
+  for _b in "$BASE" "$BASE_BAK"; do
+    [ -n "$_b" ] || continue
+    wget --no-check-certificate --timeout=25 -qO "$_out" "$_b/$_rel" || continue
+    [ -s "$_out" ] || { rm -f "$_out"; continue; }
+    if head -c 300 "$_out" | grep -qi "<html\|<!doctype"; then
+      rm -f "$_out"
+      continue
+    fi
+    return 0
+  done
+  return 1
 }
 
 same() { [ "$(md5sum "$1" | awk '{print $1}')" = "$(md5sum "$2" | awk '{print $1}')" ]; }
 
 changed=0
 
-fetch "$BASE/version1" "$TMP/version1" || log "version1 下载失败（仅影响版本号显示）"
+fetch version1 "$TMP/version1" || log "version1 下载失败（仅影响版本号显示）"
 
 apply() {
   _name="$1"; _min="$2"; _max="$3"; _vline="$4"
-  if ! fetch "$BASE/$_name" "$TMP/$_name"; then
+  if ! fetch "$_name" "$TMP/$_name"; then
     log "$_name 下载失败，保留原文件"
     return
   fi
@@ -1063,11 +1076,14 @@ def build_router(config, rule_data):
     # 7. Subscription scripts
     router_cfg = config.get("router", {}) or {}
     cron_line = router_cfg.get("cron", "10 4 * * 0")
+    base_url_bak = (config["meta"].get("base_url_bak") or "").rstrip("/")
+    base_bak_sub = f"{base_url_bak}/router/fancyss" if base_url_bak else ""
     cdn_apply = ("apply cdn.txt 10000 160000 4"
                  if router_cfg.get("update_cdn", True)
                  else "# cdn.txt 更新已关闭（config.yaml: router.update_cdn）")
     write_text(ROUTER_DIST / "ss_rule_sync.sh",
                ROUTER_SYNC_SH.replace("__BASE__", base_url)
+                             .replace("__BASE_BAK_SUB__", base_bak_sub)
                              .replace("__CRON__", cron_line)
                              .replace("__CDN_APPLY__", cdn_apply))
     write_text(ROUTER_DIST / "install.sh",
@@ -1095,6 +1111,7 @@ def build_router(config, rule_data):
         "  - 每周日 04:10 自动同步（cru 定时任务，开机自动恢复）",
         "  - 自动备份原文件为 *.orig / *.bak，可随时回滚",
         "  - 条目数异常、下载到 HTML、md5 未变化时都不会覆盖",
+        f"  - 主源失败自动回退备用源: {base_url_bak or '（未配置）'}",
         "",
         "回滚:",
         "  cp /koolshare/ss/rules/chnroute.txt.orig /koolshare/ss/rules/chnroute.txt",

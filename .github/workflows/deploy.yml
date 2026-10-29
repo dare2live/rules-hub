@@ -45,6 +45,22 @@ jobs:
         run: |
           cp dist/web/index.html dist/index.html
 
+      - name: Mirror dist to gh-pages branch (jsDelivr fallback source)
+        run: |
+          cd dist
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "gh-pages 无变更，跳过镜像"
+          else
+            git commit -q -m "chore(auto): mirror dist for jsDelivr [skip ci]"
+            git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+            echo "已镜像到 gh-pages，jsDelivr 备用源: https://cdn.jsdelivr.net/gh/${{ github.repository }}@gh-pages"
+          fi
+          rm -rf .git
+
       - name: Commit fresh cached files (if on schedule)
         if: github.event_name == 'schedule'
         run: |
