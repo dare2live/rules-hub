@@ -172,3 +172,256 @@ rule_sources:
     target: "Proxy"
     type: "FINAL"
     desc: "外网漏斗兜底"
+
+# 4. 重写规则自托管镜像与同步（每日 04:00 自动拉取上游保持最新，提供高速免翻墙分发）
+rewrites:
+  # ======= 核心去广告与开屏拦截 ======= #
+  - id: "startup_ads"
+    name: "墨鱼去开屏2.0@ddgksf2013"
+    filename: "StartUpAds.conf"
+    upstream_url: "https://ddgksf2013.top/rewrite/StartUpAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "全网主流应用开屏广告拦截"
+
+  - id: "youtube_ads"
+    name: "油管去广告@Maasea"
+    filename: "YoutubeAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/YoutubeAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "YouTube 视频、瀑布流、短视频广告拦截与画中画支持"
+
+  - id: "weibo_ads"
+    name: "微博去广告@ddgksf2013"
+    filename: "WeiboAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/WeiboAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "微博去开屏、去信息流广告与热搜净化"
+
+  - id: "ximalaya_ads"
+    name: "喜马拉雅去广告[卸载重装]@ddgksf2013"
+    filename: "Ximalaya.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/Ximalaya.conf"
+    opt_parser: false
+    enabled: true
+    desc: "喜马拉雅去弹窗、横幅及音频流广告"
+
+  - id: "amap_ads"
+    name: "高德地图净化[卸载重装]@ddgksf2013"
+    filename: "AmapAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/AmapAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "高德地图首页及路线推荐广告净化"
+
+  - id: "applet_ads"
+    name: "微信小程序去广告@ddgksf2013"
+    filename: "Applet.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/Applet.conf"
+    opt_parser: false
+    enabled: true
+    desc: "微信小程序广告与激励广告净化"
+
+  - id: "xiaohongshu_ads"
+    name: "小红书净化+去水印@ddgksf2013"
+    filename: "XiaoHongShuAds.conf"
+    upstream_url: "https://ddgksf2013.top/rewrite/XiaoHongShuAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "小红书瀑布流广告拦截与无水印原图保存"
+
+  - id: "xueqiu_ads"
+    name: "雪球净化"
+    filename: "XueQiuAds.conf"
+    upstream_url: "https://ddgksf2013.top/rewrite/XueQiuAds.conf"
+    opt_parser: false
+    enabled: true
+    desc: "雪球开屏与社区推广信息净化"
+
+  - id: "goofish_ads"
+    name: "闲鱼净化"
+    filename: "GoofishAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/refs/heads/master/AdBlock/GoofishAds.conf"
+    opt_parser: true
+    enabled: true
+    desc: "闲鱼首页推荐流及商品卡片净化"
+
+  # ======= VIP 解锁与体验增强 ======= #
+  - id: "spotify_vip"
+    name: "Spotify音乐VIP[音质≤高]@app2smile"
+    filename: "spotify.conf"
+    upstream_url: "https://raw.githubusercontent.com/app2smile/rules/master/module/spotify.conf"
+    opt_parser: false
+    enabled: true
+    desc: "Spotify 歌曲切歌、无杂音、音质解锁"
+
+  - id: "cuttlefish_vip"
+    name: "墨鱼专属VIP@ddgksf2013"
+    filename: "ForOwnUse.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/dev/master/ForOwnUse.conf"
+    opt_parser: false
+    enabled: true
+    desc: "多款小众精品 App VIP 功能解锁"
+
+  - id: "bodian_music"
+    name: "波点音乐"
+    filename: "bdyybata1.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/bdyybata1.js"
+    opt_parser: true
+    enabled: true
+    desc: "波点音乐无损音质与 VIP 解锁"
+
+  - id: "baidu_pan"
+    name: "百度网盘"
+    filename: "panda.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/panda.js"
+    opt_parser: true
+    enabled: true
+    desc: "百度网盘倍速与画质解锁"
+
+  - id: "xichuangzhu"
+    name: "西窗烛"
+    filename: "xcz.js"
+    upstream_url: "https://raw.githubusercontent.com/89996462/Quantumult-X/main/ycdz/xcz.js"
+    opt_parser: true
+    enabled: true
+    desc: "西窗烛高级会员解锁"
+
+  - id: "initium_media"
+    name: "端传媒"
+    filename: "dcm.js"
+    upstream_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Scripts/dcm.js"
+    opt_parser: true
+    enabled: true
+    desc: "端传媒会员文章畅读"
+
+  - id: "missav"
+    name: "MissAV"
+    filename: "missav.ads.js"
+    upstream_url: "https://ddgksf2013.top/scripts/missav.ads.js"
+    opt_parser: true
+    enabled: true
+    desc: "MissAV 网页去广告与播放增强"
+
+  # ======= 可选备用重写 (默认保持关闭) ======= #
+  - id: "caiyun_ads"
+    name: "彩云天气净化@ddgksf2013"
+    filename: "CaiYunAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/CaiYunAds.conf"
+    opt_parser: false
+    enabled: false
+    desc: "彩云天气广告拦截"
+
+  - id: "netease_ads"
+    name: "网易云净化@ddgksf2013"
+    filename: "NeteaseAds.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/NeteaseAds.conf"
+    opt_parser: false
+    enabled: false
+    desc: "网易云音乐净化"
+
+  - id: "q_search"
+    name: "Safari超级搜索@ddgksf2013"
+    filename: "Q-Search.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/Q-Search.conf"
+    opt_parser: false
+    enabled: false
+    desc: "Safari 快速搜索引擎切换"
+
+  - id: "douban_movie"
+    name: "豆瓣网页观影快捷跳转@ddgksf2013"
+    filename: "Douban.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/Douban.conf"
+    opt_parser: false
+    enabled: false
+    desc: "豆瓣网页观影快捷跳转"
+
+  - id: "general_redirect"
+    name: "Google重定向@DivineEngine"
+    filename: "General.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/General.conf"
+    opt_parser: false
+    enabled: false
+    desc: "Google 地区重定向修复"
+
+  - id: "unblock_wechat_url"
+    name: "微信解锁被屏蔽的URL@zZPiglet"
+    filename: "UnblockURLinWeChat.conf"
+    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Function/UnblockURLinWeChat.conf"
+    opt_parser: false
+    enabled: false
+    desc: "微信内置浏览器解锁被封链接"
+
+  - id: "boxjs_rewrite"
+    name: "BoxJS商店版@chavyleung"
+    filename: "boxjs.rewrite.quanx.conf"
+    upstream_url: "https://raw.githubusercontent.com/chavyleung/scripts/master/box/rewrite/boxjs.rewrite.quanx.conf"
+    opt_parser: false
+    enabled: false
+    desc: "BoxJS 本地 Web 控制台与订阅商店"
+
+  - id: "kyxq"
+    name: "口语星球"
+    filename: "kyxq.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/kyxq.js"
+    opt_parser: true
+    enabled: false
+    desc: "口语星球 VIP 解锁"
+
+  - id: "namibox"
+    name: "纳米盒"
+    filename: "namibox.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/namibox.js"
+    opt_parser: true
+    enabled: false
+    desc: "纳米盒 VIP 解锁"
+
+  - id: "ximalaya_js"
+    name: "喜马拉雅"
+    filename: "ximalaya.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/ximalaya.js"
+    opt_parser: true
+    enabled: false
+    desc: "喜马拉雅 VIP 解锁"
+
+  - id: "qpy"
+    name: "趣配音"
+    filename: "qpy.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/qpy.js"
+    opt_parser: true
+    enabled: false
+    desc: "英语趣配音 VIP 解锁"
+
+  - id: "xintiao"
+    name: "有心跳"
+    filename: "xintiao.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/xintiao.js"
+    opt_parser: true
+    enabled: false
+    desc: "有心跳 VIP 解锁"
+
+  - id: "kuwo"
+    name: "酷我音乐"
+    filename: "kuwo.js"
+    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/kuwo.js"
+    opt_parser: true
+    enabled: false
+    desc: "酷我音乐 VIP 解锁"
+
+  - id: "ft_chinese"
+    name: "FT Chinese"
+    filename: "cloudfront.js"
+    upstream_url: "https://raw.githubusercontent.com/chxm1023/Rewrite/main/cloudfront.js"
+    opt_parser: true
+    enabled: false
+    desc: "FT 中文网会员阅读"
+
+  - id: "youpume"
+    name: "有谱么"
+    filename: "youpume.js"
+    upstream_url: "https://raw.githubusercontent.com/chxm1023/Rewrite/main/youpume.js"
+    opt_parser: true
+    enabled: false
+    desc: "有谱么会员吉他谱"
