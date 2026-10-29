@@ -710,6 +710,62 @@ def build_rewrites(config):
     return produced
 
 
+def build_qx_inline_direct_rules():
+    """把「防误杀白名单 + 个人直连白名单」编译成 QX 的 filter_local 内联规则。
+
+    为什么必须内联，而不是只靠 filter_remote 订阅：
+      1. QX 的匹配顺序是 filter_local → filter_remote → final，
+         内联规则的优先级最高，不受订阅是否刷新成功影响；
+      2. BYD / DiLink 这类服务是「国内域名 + 部分境外 IP」，
+         一旦订阅没拉到、或域名解析出境外 IP 导致 geoip,cn 不命中，
+         就会被 final 兜底策略送进代理，App 直接报网络错误；
+      3. 内联后即使 GitHub Pages 在国内抽风、订阅 24h 未更新，直连依然成立。
+    """
+    rules = []
+    for rel in ("rules/unbreak.txt", "rules/direct.txt"):
+        fpath = BASE_DIR / rel
+        if not fpath.exists():
+            continue
+        for line in read_text(fpath).splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith(";"):
+                continue
+            conv = to_qx_rule(s, "DIRECT")
+            if not conv:
+                continue
+            head, _, tail = conv.partition(",")
+            rules.append(f"{head.lower()},{tail}")
+    # 去重但保持顺序（白名单靠前的优先）
+    seen, out = set(), []
+    for r in rules:
+        if r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out
+
+
+# 国内解析器兜底：原配置只有 1.1.1.1 / 8.8.8.8，所有域名都走海外 DNS，
+# 国内域名会被解析到「对海外解析器最优」的境外节点，这是 BYD 类 App 报错的常见诱因。
+QX_DOMESTIC_DNS = [
+    "server=/*.cn/223.5.5.5",
+    "server=/*.byd.com/223.5.5.5",
+    "server=/*.bydauto.com/223.5.5.5",
+    "server=/*.bydauto.com.cn/223.5.5.5",
+]
+
+
+def build_qx_dns_block(dns_block):
+    """在原 [dns] 段基础上补齐国内解析器，不覆盖用户已有的自定义解析规则。"""
+    lines = dns_block.splitlines() if dns_block else []
+    if not lines:
+        lines = ["no-ipv6", "no-system", "server=223.5.5.5", "server=119.29.29.29"]
+    existing = {l.strip() for l in lines}
+    extra = [d for d in QX_DOMESTIC_DNS if d not in existing]
+    if extra:
+        lines = lines + ["# 国内域名走国内 DNS（否则会被海外解析器指到境外节点）"] + extra
+    return "\n".join(lines)
+
+
 def generate_personal_qx_config(config, produced=None):
     """Rebuild a clean personal QX profile from user_qx_input.txt.
 
@@ -772,7 +828,8 @@ def generate_personal_qx_config(config, produced=None):
     p.append(f"# 生成时间: {gen_time} (北京时间)")
     p.append(f"# 规则与重写自托管: {base_url}")
     p.append(f"# 节点: {', '.join(node_tags) if node_tags else '(未检测到 server_local 节点)'}")
-    p.append("# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
+    p.append(f"# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
+    p.append("# 本次关键修复: 直连白名单（含 BYD/DiLink）已内联到 [filter_local]，不再依赖订阅刷新")
     p.append("")
 
     p.append("[general]")
@@ -780,7 +837,7 @@ def generate_personal_qx_config(config, produced=None):
     p.append("")
 
     p.append("[dns]")
-    p.append(dns_block if dns_block else "no-ipv6\nno-system\nserver=223.5.5.5\nserver=119.29.29.29")
+    p.append(build_qx_dns_block(dns_block))
     p.append("")
 
     p.append("[policy]")
@@ -800,6 +857,13 @@ def generate_personal_qx_config(config, produced=None):
     p.append("# 局域网与保留地址直连")
     for cidr in ("10.0.0.0/8", "127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/24"):
         p.append(f"ip-cidr, {cidr}, direct")
+
+    inline_rules = build_qx_inline_direct_rules()
+    p.append("# 防误杀白名单 + 个人直连白名单（内联，优先级高于远程订阅与 geoip）")
+    p.append("# 关键：BYD / DiLink 等「国内域名 + 境外 IP」的服务必须在这里直连，")
+    p.append("#       否则会被 final 兜底送进代理，App 报「网络错误」。")
+    p.extend(inline_rules)
+
     p.append("# 国内 GeoIP 直连，其余走兜底")
     p.append("geoip, cn, direct")
     p.append("final, 兜底分流")
