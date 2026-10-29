@@ -4,7 +4,7 @@
 meta:
   name: "Rules Hub"
   author: "dare2live"
-  base_url: "https://rules-hub.pages.dev"
+  base_url: "https://dare2live.github.io/rules-hub"  # 默认使用原生免配置的 GitHub Pages（也可换为 Cloudflare Pages: https://rules-hub.pages.dev）
   managed_interval: 86400  # 自动同步刷新周期（秒）
 
 # 1. 核心业务策略组定义（全端统一收敛至 6 个黄金策略组）
@@ -87,17 +87,17 @@ fallback_groups:
       - "Oracle San Jose"
       - "Google Oregon"
 
-# 3. 规则分类与策略映射
+# 3. 规则分类与策略映射（本地定制 + 开源知名上游自动融合）
 rule_sources:
   - id: "unbreak"
     target: "DIRECT"
     file: "rules/unbreak.txt"
-    desc: "防误杀白名单（高优先级）"
+    desc: "防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）"
 
   - id: "custom_direct"
     target: "DIRECT"
     file: "rules/direct.txt"
-    desc: "个人专属项目直连、微信、企业微信"
+    desc: "个人专属项目直连、微信、企业微信、国内银行"
 
   - id: "claude"
     target: "Claude"
@@ -105,6 +105,8 @@ rule_sources:
     desc: "Claude & Anthropic 全生态"
     process:
       - "Claude"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Claude/Claude.list"
 
   - id: "google_ai"
     target: "GoogleAI"
@@ -114,6 +116,8 @@ rule_sources:
       - "Gemini"
       - "agy"
       - "GeminiAppLauncher"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Gemini/Gemini.list"
 
   - id: "workbuddy"
     target: "WorkBuddy"
@@ -127,11 +131,17 @@ rule_sources:
     target: "Media"
     file: "rules/media.txt"
     desc: "主流海外流媒体服务"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/YouTube/YouTube.list"
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Netflix/Netflix.list"
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Spotify/Spotify.list"
 
   - id: "reject"
     target: "REJECT"
     file: "rules/reject.txt"
     desc: "广告与数据分析追踪"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Advertising/Advertising.list"
 
   - id: "china_geoip"
     target: "DIRECT"

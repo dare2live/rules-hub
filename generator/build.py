@@ -12,6 +12,8 @@ Generates:
 import os
 import sys
 import yaml
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -39,9 +41,59 @@ def read_rule_file(rel_path):
     with open(full_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line and not line.startswith("#"):
+            if line and not line.startswith("#") and not line.startswith(";"):
                 lines.append(line)
     return lines
+
+
+def fetch_upstream(url, timeout=8):
+    """Safely fetch external rules from open-source repositories."""
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            content = response.read().decode("utf-8", errors="ignore")
+            lines = []
+            for line in content.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith(";"):
+                    lines.append(line)
+            return lines
+    except Exception as e:
+        print(f"   ⚠️  [Warning] Upstream fetch failed for {url}: {e} (Continuing with local rules)")
+        return []
+
+
+def normalize_rule(line):
+    """Normalize rule syntax across different formats into clean Surge-compatible format."""
+    parts = [p.strip() for p in line.split(",")]
+    if not parts or not parts[0]:
+        return None
+    rtype = parts[0].upper()
+    if rtype in ("DOMAIN-SUFFIX", "HOST-SUFFIX"):
+        return f"DOMAIN-SUFFIX,{parts[1]}"
+    elif rtype in ("DOMAIN", "HOST"):
+        return f"DOMAIN,{parts[1]}"
+    elif rtype in ("DOMAIN-KEYWORD", "HOST-KEYWORD"):
+        return f"DOMAIN-KEYWORD,{parts[1]}"
+    elif rtype == "IP-CIDR":
+        return f"IP-CIDR,{parts[1]}"
+    elif rtype == "PROCESS-NAME":
+        return f"PROCESS-NAME,{parts[1]}"
+    elif "." in parts[0] and " " not in parts[0] and not parts[0].startswith("/"):
+        # Pure domain format (e.g. from DNS blocklists or AdGuard)
+        return f"DOMAIN-SUFFIX,{parts[0]}"
+    return line
+
+
+def extract_domain(rule_line):
+    """Extract domain name for matching against immunity lists."""
+    parts = [p.strip() for p in rule_line.split(",")]
+    if len(parts) >= 2 and parts[0] in ("DOMAIN", "DOMAIN-SUFFIX", "HOST", "HOST-SUFFIX"):
+        return parts[1].lower()
+    return None
 
 
 def to_qx_rule(line):
@@ -573,12 +625,64 @@ def main():
     print("🚀 [Rules Hub] Starting build process...")
     config = load_config()
     
-    # Load all rule files into memory
-    rule_data = {}
+    # 1. Read local rule files
+    local_data = {}
     for r in config["rule_sources"]:
         if "file" in r:
             rel_path = r["file"]
-            rule_data[rel_path] = read_rule_file(rel_path)
+            local_data[rel_path] = read_rule_file(rel_path)
+            
+    # 2. Extract immunity set (unbreak & direct domains that must never be blocked by reject)
+    immunity_set = set()
+    for rel_path in ("rules/unbreak.txt", "rules/direct.txt"):
+        for line in local_data.get(rel_path, []):
+            d = extract_domain(line)
+            if d:
+                immunity_set.add(d)
+
+    # 3. Process each rule source: merge local + upstream, normalize, deduplicate & filter
+    rule_data = {}
+    for r in config["rule_sources"]:
+        if "file" not in r:
+            continue
+        rel_path = r["file"]
+        is_reject = (r.get("target") == "REJECT")
+        
+        # Local lines first (highest priority)
+        raw_lines = list(local_data.get(rel_path, []))
+        local_count = len(raw_lines)
+        
+        # Upstream lines (if specified)
+        upstreams = r.get("upstream_urls", [])
+        if upstreams:
+            print(f"🌐 Fetching {len(upstreams)} upstream source(s) for [{r['id']}]...")
+            for u in upstreams:
+                u_lines = fetch_upstream(u)
+                raw_lines.extend(u_lines)
+
+        # Normalize, deduplicate & apply immunity protection
+        seen = set()
+        clean_lines = []
+        for line in raw_lines:
+            norm = normalize_rule(line)
+            if not norm or norm in seen:
+                continue
+            
+            # Immunity protection: NEVER let upstream advertising block user whitelist or direct domains
+            if is_reject:
+                d = extract_domain(norm)
+                if d and (d in immunity_set or any(d.endswith("." + imm) for imm in immunity_set)):
+                    continue
+                    
+            seen.add(norm)
+            clean_lines.append(norm)
+            
+        rule_data[rel_path] = clean_lines
+        diff = len(clean_lines) - local_count
+        if diff > 0:
+            print(f"   -> [{r['id']}] Local: {local_count} + Upstream: {diff} = Total: {len(clean_lines)} rules")
+        else:
+            print(f"   -> [{r['id']}] Total: {len(clean_lines)} rules")
             
     # Build each target
     print("🔨 Generating Surge configurations and rulesets...")

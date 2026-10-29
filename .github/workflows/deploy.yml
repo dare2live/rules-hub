@@ -4,11 +4,25 @@ on:
   push:
     branches:
       - main
-      - master
+  schedule:
+    # 每天北京时间凌晨 04:00 (UTC 20:00) 自动同步上游规则并发布
+    - cron: '0 20 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
-  build:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -23,28 +37,22 @@ jobs:
         run: |
           pip install pyyaml
 
-      - name: Run Rules Compiler
+      - name: Run Rules Compiler (with Upstream Sync)
         run: |
           python generator/build.py
 
       - name: Prepare Deployment Artifacts
         run: |
-          # Copy static web page to dist root
           cp dist/web/index.html dist/index.html
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: "rules-hub"
-          directory: "dist"
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
-      - name: Deploy to GitHub Pages (Fallback)
-        uses: peaceiris/actions-gh-pages@v4
-        if: always()
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
