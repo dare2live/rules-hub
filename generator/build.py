@@ -1080,7 +1080,7 @@ def build_router(config, rule_data):
         f"生成时间: {gen_time} (北京时间)",
         f"订阅根地址: {base_url}/router/fancyss",
         "",
-        f"chnroute.txt      中国 IP 段 {len(chnroute)} 条（旧版 2015-08-01，5777 条）",
+        f"chnroute.txt      中国 IP 段 {len(chnroute)} 条（旧版 7456 行 / ipset 7464 条）",
         f"gfwlist.conf      代理域名 {len(merged)} 条（旧版 2015-08-01，11166 行）",
         f"cdn.txt           国内 CDN 域名 {len(cdn)} 条（旧版 2015-08-01，73483 行）",
         f"version1          fancyss 原生更新清单",
