@@ -129,11 +129,31 @@ Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignor
 
 ```
                       ┌─ 公开（可枚举，任何人能看）
-  规则 / 重写 / 策略派生 ─┤   https://dare2live.github.io/rules-hub/...
+  规则 / 重写 / 策略派生 ─┤   GitHub Pages  dare2live.github.io/rules-hub/...
+                      │   jsDelivr 镜像 cdn.jsdelivr.net/gh/dare2live/rules-hub@gh-pages
                       │
                       └─ 私有（路径不可枚举，当密码用）
-  节点 / 个人配置        ──   https://rules.lifehackers.cc/<口令>/...
+  节点 / 个人配置        ──   Cloudflare Worker  rules-personal.herokuv2.workers.dev/<口令>/...
 ```
+
+### 为什么私有侧不挂自有域名
+
+`lifehackers.cc` 同时跑着 edgetunnel 这类翻墙服务，是 GFW 的重点目标。
+**更新入口一旦跟主域绑在一起，主域被墙的那天就没法改配置自救了。**
+所以私有侧只用 Cloudflare 自己的 `workers.dev`，跟自有域名、VPS 全部解耦：
+
+| 层 | 托管方 | 挂了会怎样 |
+|---|---|---|
+| 规则 | GitHub Pages + jsDelivr | 两个源互相兜底，都挂的概率极低 |
+| 私有配置 | Cloudflare Worker（`workers.dev`） | 跟你的域名/VPS 无关，独立存活 |
+
+顺带的好处：`workers.dev` 不经过 zone 安全策略，不会被 Cloudflare 托管质询拦掉
+（挂自有域名时，裸 `curl` 会吃 403 `Just a moment...`，只有浏览器指纹能过）。
+
+> 真要加一条自有域名入口，`worker/wrangler.toml` 里取消 `routes` 那行注释再
+> `wrangler deploy` 即可 —— 但别把它当主入口。
+
+### 结构
 
 私有那侧是一个 Cloudflare Worker（`worker/`）+ KV（`RULES_PERSONAL`），
 内容全部存在 KV 里，**git 里一个字都没有**。路径首段是 32 字节随机口令，
@@ -155,8 +175,7 @@ Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignor
 git add -A && git commit -m "..." && git push
 
 # 节点 / 策略组结构改了：重新生成 + 推送私有侧
-/usr/bin/python3 generator/build.py
-python3 scripts/publish_private.py
+./scripts/sync.sh          # = build.py + publish_private.py
 
 # 之后在手机上点一次「更新配置文件」即可
 python3 scripts/publish_private.py --show     # 忘了口令就用这个
@@ -179,22 +198,13 @@ Clash 侧没有这个限制（`proxy-providers` 支持完整字段），要拆�
 proxy-providers:
   self:
     type: http
-    url: https://rules.lifehackers.cc/<口令>/nodes.yaml
+    url: https://rules-personal.herokuv2.workers.dev/<口令>/nodes.yaml
     interval: 86400
     path: ./providers/self.yaml
     health-check: { enable: true, url: http://cp.cloudflare.com/generate_204, interval: 300 }
 ```
 
 然后把 `proxy-groups` 里对应的 `proxies:` 换成 `use: [self]`。
-
-### 一个坑：Cloudflare 会质询「像爬虫」的请求
-
-`rules.lifehackers.cc` 上，裸 `curl` 会被托管质询（HTTP 403 + `Just a moment...`），
-但 QX / Clash / 浏览器指纹的请求正常返回。如果哪天客户端拉不到配置：
-
-1. 先换 UA 试：`curl -A "Quantumult%20X/1.5.0" ...`
-2. 还不行就去 Cloudflare 后台给这个主机名加一条 **Configuration Rule → Skip**（跳过托管质询）
-3. 应急可走 `https://rules-personal.herokuv2.workers.dev/<口令>/qx.conf`（不经过 zone 安全策略）
 
 ---
 

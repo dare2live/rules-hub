@@ -1810,7 +1810,9 @@ def build_clash(config, rule_data):
         L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
     L.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
     L.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
-    L.append("  - IP-CIDR,152.70.126.105/32,DIRECT,no-resolve")
+    L.append("  # 把「代理服务器自己的公网 IP」也放进直连，避免流量绕回自己形成环路。")
+    L.append("  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。")
+    L.append("  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve")
     L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
     L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
 
