@@ -9,7 +9,7 @@
 ## 🌟 设计原则
 
 1. **单一数据源** — 改一处，六端同时生效
-2. **零节点泄露** — 本仓库与所有托管链接**不含任何节点 IP、密码、证书**，可公开
+2. **零节点泄露** — 本仓库与所有**公开**托管链接不含任何节点 IP、密码、证书；带节点的配置只走私有 KV（见「私有订阅」）
 3. **产物即服务** — 客户端只订阅 `dist/` 下的成品，日常不需要改配置
 4. **双源兜底** — GitHub Pages 在国内时通时不通，软路由同步失败会自动回退到 jsDelivr
 
@@ -33,6 +33,9 @@ rules-hub/
 │   └── reject.txt               # 广告与追踪
 ├── rewrites/                    # Quantumult X 重写脚本（去开屏、去广告等）
 ├── generator/build.py           # 编译引擎（Python 3 + PyYAML）
+├── worker/                      # Cloudflare Worker：私有订阅分发（读 KV）
+├── scripts/publish_private.py   # 个人配置 + 节点订阅 → Cloudflare KV
+├── scripts/sync.sh              # 一条命令：重新生成 + 推送私有侧
 ├── web/                         # 静态仪表盘模板
 ├── .github/workflows/deploy.yml # CI：构建 → GitHub Pages + gh-pages 镜像
 └── dist/                        # 编译产物（不入库）
@@ -117,6 +120,81 @@ Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignor
 节点按**名字**去重而不是按 `server:port`：同一个节点在 Surge 和 QX 里可能写成
 不同端口（`Google Oregon` 就是 `Proxy.dconf` 写 443、`user_qx_input.txt` 写 10086），
 按地址去重会留下两个同名节点，mihomo 直接判配置非法。
+
+---
+
+## 🔐 私有订阅（节点 + 个人配置）
+
+公开站（gh-pages）只放**规则**；**节点和带节点的配置**走另一条路，因为它们含明文口令。
+
+```
+                      ┌─ 公开（可枚举，任何人能看）
+  规则 / 重写 / 策略派生 ─┤   https://dare2live.github.io/rules-hub/...
+                      │
+                      └─ 私有（路径不可枚举，当密码用）
+  节点 / 个人配置        ──   https://rules.lifehackers.cc/<口令>/...
+```
+
+私有那侧是一个 Cloudflare Worker（`worker/`）+ KV（`RULES_PERSONAL`），
+内容全部存在 KV 里，**git 里一个字都没有**。路径首段是 32 字节随机口令，
+不匹配一律返回 404，比较用定长算法防止按响应时间爆破。
+
+| 路径 | 内容 | 谁用 |
+|---|---|---|
+| `/<口令>/` | 链接清单页（自己看） | 浏览器 |
+| `/<口令>/qx.conf` | Quantumult X 完整配置（含节点） | QX 订阅 |
+| `/<口令>/clash.yaml` | Clash / mihomo 完整配置（含节点） | Clash 订阅 |
+| `/<口令>/surge.conf` | Surge 完整配置 | Surge 订阅 |
+| `/<口令>/nodes.yaml` | 纯节点，Clash `proxy-provider` 格式 | 其它 Clash 客户端 |
+| `/<口令>/nodes.txt` | 纯节点，base64 分享链接 | Shadowrocket / v2rayN / 路由器 |
+
+### 改完怎么生效
+
+```bash
+# 规则改了：推上去，CI 自动构建，设备端每天自己拉，什么都不用做
+git add -A && git commit -m "..." && git push
+
+# 节点 / 策略组结构改了：重新生成 + 推送私有侧
+/usr/bin/python3 generator/build.py
+python3 scripts/publish_private.py
+
+# 之后在手机上点一次「更新配置文件」即可
+python3 scripts/publish_private.py --show     # 忘了口令就用这个
+python3 scripts/publish_private.py --rotate   # 口令泄露了就换一个
+```
+
+> **这就是「机场模式」**：设备只认一个订阅地址，之后所有变更都在服务端完成，
+> 客户端点一下更新就同步了，不需要再传文件。
+
+### 为什么不再拆一个「纯节点订阅」给 QX
+
+QX 的 `[server_local]` 能写 `udp-relay` / `fast-open`，而 `ss://` 分享链接
+（`[server_remote]` 唯一支持的格式）没有这两个字段。拆出去等于丢掉 UDP 中继，
+QUIC 和部分游戏会退回直连。既然**整份配置本身就是订阅**，节点跟着配置一起刷新，
+效果一样而功能不缩水，所以 QX 侧保持内嵌。
+
+Clash 侧没有这个限制（`proxy-providers` 支持完整字段），要拆随时可以：
+
+```yaml
+proxy-providers:
+  self:
+    type: http
+    url: https://rules.lifehackers.cc/<口令>/nodes.yaml
+    interval: 86400
+    path: ./providers/self.yaml
+    health-check: { enable: true, url: http://cp.cloudflare.com/generate_204, interval: 300 }
+```
+
+然后把 `proxy-groups` 里对应的 `proxies:` 换成 `use: [self]`。
+
+### 一个坑：Cloudflare 会质询「像爬虫」的请求
+
+`rules.lifehackers.cc` 上，裸 `curl` 会被托管质询（HTTP 403 + `Just a moment...`），
+但 QX / Clash / 浏览器指纹的请求正常返回。如果哪天客户端拉不到配置：
+
+1. 先换 UA 试：`curl -A "Quantumult%20X/1.5.0" ...`
+2. 还不行就去 Cloudflare 后台给这个主机名加一条 **Configuration Rule → Skip**（跳过托管质询）
+3. 应急可走 `https://rules-personal.herokuv2.workers.dev/<口令>/qx.conf`（不经过 zone 安全策略）
 
 ---
 

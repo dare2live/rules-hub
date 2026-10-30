@@ -2100,6 +2100,75 @@ def generate_personal_clash_config(config, rule_data):
     return out
 
 
+PRIVATE_DIR = BASE_DIR / ".private"
+
+
+def _node_to_uri(n):
+    """把节点 dict 转成标准的分享链接（ss:// / hysteria2://）。"""
+    import urllib.parse
+
+    tag = urllib.parse.quote(n["name"], safe="")
+    if n["type"] == "ss":
+        userinfo = base64.urlsafe_b64encode(
+            f"{n['cipher']}:{n['password']}".encode()
+        ).decode().rstrip("=")
+        return f"ss://{userinfo}@{n['server']}:{n['port']}#{tag}"
+    if n["type"] == "hysteria2":
+        q = f"?sni={n['sni']}" if n.get("sni") else ""
+        if n.get("skip-cert-verify"):
+            q += ("&" if q else "?") + "insecure=1"
+        return f"hysteria2://{n['password']}@{n['server']}:{n['port']}{q}#{tag}"
+    return None
+
+
+def build_private_node_subs():
+    """把真实节点单独导出成「机场式」节点订阅。
+
+    只写 .private/（gitignored），由 scripts/publish_private.py 推到 Cloudflare KV。
+    gh-pages 公开产物里永远不会出现这些内容。
+    """
+    from datetime import datetime, timezone, timedelta
+
+    nodes = parse_nodes_for_clash()
+    if not nodes:
+        print("   ⚠️  [私有] 未找到节点，跳过节点订阅生成")
+        return
+
+    if not PRIVATE_DIR.is_dir():
+        PRIVATE_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+
+    # 1) Clash / mihomo 的 proxy-provider 格式（type: http 可直接引用）
+    lines = [
+        "# Rules Hub — 节点订阅（Clash / mihomo proxy-provider）",
+        f"# 生成时间: {ts} (北京时间)",
+        f"# 节点: {', '.join(n['name'] for n in nodes)}",
+        "proxies:",
+    ]
+    for n in nodes:
+        lines.append(f"  - name: {clash_yaml_scalar(n['name'])}")
+        lines.append(f"    type: {n['type']}")
+        lines.append(f"    server: {n['server']}")
+        lines.append(f"    port: {n['port']}")
+        if n["type"] == "ss":
+            lines.append(f"    cipher: {n['cipher']}")
+        lines.append(f"    password: {clash_yaml_scalar(n['password'])}")
+        if n["type"] == "ss":
+            lines.append("    udp: true")
+        if n.get("sni"):
+            lines.append(f"    sni: {n['sni']}")
+        if n.get("skip-cert-verify"):
+            lines.append("    skip-cert-verify: true")
+    (PRIVATE_DIR / "nodes.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # 2) 通用分享链接（base64 包裹），QX / Surge / Shadowrocket / v2rayN 都能吃
+    uris = [u for u in (_node_to_uri(n) for n in nodes) if u]
+    blob = base64.b64encode("\n".join(uris).encode()).decode()
+    (PRIVATE_DIR / "nodes.txt").write_text(blob + "\n", encoding="utf-8")
+
+    print(f"   🔒 [私有] 节点订阅已生成: .private/nodes.yaml + nodes.txt（{len(uris)} 个节点）")
+
+
 def build_web_admin(config, rule_data):
     """Generate the static Web Admin dashboard for Cloudflare / GitHub Pages."""
     WEB_DIST.mkdir(parents=True, exist_ok=True)
@@ -2752,6 +2821,7 @@ def main():
     print("🔨 Generating Clash (mihomo) rulesets...")
     build_clash(config, rule_data)
     generate_personal_clash_config(config, rule_data)
+    build_private_node_subs()
     
     print("🔨 Generating Asuswrt-Merlin soft router custom lists...")
     build_router(config, rule_data)

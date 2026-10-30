@@ -18,10 +18,15 @@ user_qx_input.txt
 *Personal*.conf
 # Clash 个人配置（含节点明文密码）
 Clash_Personal.yaml
+# 私有订阅产物：节点订阅 + 分发口令，只推 Cloudflare KV，绝不入库
+.private/
 *.p12
 
 # Local agent workspace (memory / session data)
 .workbuddy-ai/
+
+# Wrangler 本地状态
+.wrangler/
 
 # 路由器配置备份（含密码与密钥，绝不入库）
 backups/
