@@ -48,7 +48,7 @@ rules-hub/
 
 > macOS 自带的 `python3` 默认没有 PyYAML，用 `/usr/bin/python3` 或先 `pip3 install pyyaml`。
 
-### 产物清单（`dist/`，共 76 个文件）
+### 产物清单（`dist/`，共 90 个文件）
 
 | 路径 | 用途 |
 |---|---|
@@ -57,6 +57,8 @@ rules-hub/
 | `qx/rewrites/*.conf` | QX 重写脚本，自托管 |
 | `qx/selftest.html` + `qx/rewrites/selftest.js` | 重写链路自检页（见下） |
 | `shadowrocket/*.list` | Shadowrocket 规则集 |
+| `clash/rules/*.yaml` | Clash（mihomo）rule-provider 规则集 |
+| `clash/config.example.yaml` | Clash 配置模板（占位节点，供参考） |
 | `router/fancyss/{chnroute,gfwlist.conf,cdn.txt,version1}` | 梅林 fancyss 规则文件 |
 | `router/ss_rule_sync.sh` | 路由器同步脚本（含 jsDelivr 备用源） |
 | `router/install.sh` | 路由器一键安装 |
@@ -79,6 +81,42 @@ rules-hub/
 | `REJECT` | 广告拦截 |
 
 QX 的策略组由 `config.yaml` 派生，并按 `server_local` 中**真实存在的节点标签**过滤，不会引用不存在的节点导致导入失败。
+
+---
+
+## 🐱 Clash / mihomo（Apple 全平台）
+
+目标客户端：[ProjectClash/Clash-Client](https://github.com/ProjectClash/Clash-Client)，
+内核是 mihomo（Clash.Meta），配置即标准 Clash YAML。已确认其支持
+`rule-providers`、`proxy-providers`、`DOMAIN-REGEX`、`PROCESS-NAME`、`sniffer`、`tun.dns-hijack`。
+
+**和 QX 一样分两层：规则托管在远端，节点留在本地。**
+
+```
+dist/clash/rules/*.yaml        ← 公开托管，客户端按 interval=86400 自动拉
+dist/clash/config.example.yaml ← 公开模板（占位节点）
+Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignore
+```
+
+规则集由同一批 `rules/*.txt` 转换而来，规则**顺序与 Surge 完全一致**
+（进程级 → 局域网 → 各业务规则集 → `GEOIP,CN` → `MATCH`），三端分流结果才对得上。
+
+几个转换上的注意点：
+
+| Surge | Clash | 说明 |
+|---|---|---|
+| `RULE-SET,<url>,<policy>` | `rule-providers` + `RULE-SET,<name>,<policy>` | provider 用 `behavior: classical`，保留 `DOMAIN` 与 `DOMAIN-SUFFIX` 的精确/后缀区别 |
+| `IP-ASN,20473,no-resolve` | `IP-ASN,20473` | mihomo 的 `IP-ASN` 不认 `no-resolve`，带上会解析失败 |
+| `FINAL,Proxy` | `MATCH,Proxy` | |
+| `RULE-SET,LAN,DIRECT` | 内联 `IP-CIDR,192.168.0.0/16,DIRECT,no-resolve` 等 | Clash 没有内置 LAN 集合 |
+
+**DNS 策略与其他两端一致**：`nameserver` 只放国内 DoH（阿里 / DNSPod），
+境外域名交给节点远端解析。`dns.listen` 故意不写 —— iOS 沙箱里绑
+`0.0.0.0:1053` 会失败，而 `tun.dns-hijack: any:53` 已经把查询收进来了。
+
+节点按**名字**去重而不是按 `server:port`：同一个节点在 Surge 和 QX 里可能写成
+不同端口（`Google Oregon` 就是 `Proxy.dconf` 写 443、`user_qx_input.txt` 写 10086），
+按地址去重会留下两个同名节点，mihomo 直接判配置非法。
 
 ---
 

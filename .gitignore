@@ -16,6 +16,8 @@ PROJECT_CONTEXT.md
 user_qx_input.txt
 *personal*.conf
 *Personal*.conf
+# Clash 个人配置（含节点明文密码）
+Clash_Personal.yaml
 *.p12
 
 # Local agent workspace (memory / session data)

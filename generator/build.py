@@ -1556,6 +1556,550 @@ def build_shadowrocket(config, rule_data):
                 f.write("\n".join(list_content) + "\n")
 
 
+# ===== Clash (mihomo) =====
+# 目标客户端：ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS），
+# 内核是 mihomo（Clash.Meta），配置即标准 Clash YAML。
+# 已验证其支持 rule-providers / proxy-providers / DOMAIN-REGEX / PROCESS-NAME 等。
+CLASH_DIST = DIST_DIR / "clash"
+CLASH_RULES_DIST = CLASH_DIST / "rules"
+
+
+def surge_rule_to_clash(line):
+    """把 Surge 语法的一条规则转成 Clash 语法（不含策略名）。
+
+    只转「能放进 rule-provider payload」的类型：provider 里不带策略，
+    策略由主配置的 RULE-SET 行决定。
+    """
+    s = (line or "").strip()
+    if not s or s.startswith("#"):
+        return None
+    parts = [p.strip() for p in s.split(",")]
+    kind = parts[0].upper()
+    if len(parts) < 2:
+        return None
+    val = parts[1]
+
+    if kind in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD"):
+        return f"{kind},{val}"
+    if kind == "IP-CIDR":
+        # no-resolve 在 Clash 里是规则尾部的选项，语义和 Surge 一致
+        if len(parts) >= 3 and parts[2].lower() == "no-resolve":
+            return f"IP-CIDR,{val},no-resolve"
+        return f"IP-CIDR,{val}"
+    if kind == "IP-ASN":
+        # mihomo 的 IP-ASN 不接受 no-resolve，带上会解析失败，这里去掉
+        return f"IP-ASN,{val}"
+    if kind == "PROCESS-NAME":
+        return f"PROCESS-NAME,{val}"
+    return None
+
+
+def clash_yaml_scalar(text):
+    """YAML 单引号标量：内部单引号要写成两个。"""
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def build_clash(config, rule_data):
+    """生成 Clash（mihomo）的远程规则集与配置模板。
+
+    和 QX / Surge 共用同一批规则源，只是换个输出格式，保证三端分流一致。
+
+    产物分两类：
+      dist/clash/rules/*.yaml   公开的 rule-provider，客户端按 interval 自动更新
+      dist/clash/config.example.yaml  模板（占位节点，供别人参考）
+
+    真实节点不进仓库：个人配置由 generate_personal_clash_config() 在本地生成。
+    """
+    if CLASH_RULES_DIST.exists():
+        import shutil
+        shutil.rmtree(CLASH_RULES_DIST)
+    CLASH_RULES_DIST.mkdir(parents=True, exist_ok=True)
+    base_url = config["meta"]["base_url"]
+
+    # 1. rule-provider 文件
+    provider_ids = []
+    for r in config.get("rule_sources", []):
+        rule_id = r["id"]
+        if "file" not in r:
+            continue
+        payload = []
+        for line in rule_data.get(r["file"], []):
+            conv = surge_rule_to_clash(line)
+            if conv:
+                payload.append(conv)
+        if not payload:
+            continue
+        body = [
+            f"# {r.get('desc', rule_id)}",
+            "# 由 rules-hub 自动生成，勿手改。",
+            "# 同源规则：Surge / Quantumult X / Clash 三端内容一致。",
+            "payload:",
+        ]
+        body += [f"  - {clash_yaml_scalar(x)}" for x in payload]
+        write_text(CLASH_RULES_DIST / f"{rule_id}.yaml", "\n".join(body) + "\n")
+        provider_ids.append((rule_id, r.get("target"), len(payload)))
+
+    # 2. 主配置模板
+    policies = [p for p in config.get("policies", []) if p.get("type") == "select"]
+    fb_groups = config.get("fallback_groups", [])
+
+    L = []
+    L.append("# ===== Rules Hub — Clash (mihomo) 配置模板 =====")
+    L.append("# 适用客户端：ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）")
+    L.append(f"# 规则源：{base_url}/clash/rules/  （每日自动更新，客户端按 interval 拉取）")
+    L.append("#")
+    L.append("# 这是公开模板，不含任何真实节点。两种用法：")
+    L.append("#   1) 把自己的节点填进 proxies: 段，替换掉下面的占位项")
+    L.append("#   2) 用 proxy-providers: 挂自己的订阅链接，节点自动更新")
+    L.append("# 想省事就直接用本地生成的 Clash_Personal.yaml（已含节点，不进仓库）。")
+    L.append("")
+
+    L.append("mixed-port: 7890")
+    L.append("allow-lan: false")
+    L.append("bind-address: '*'")
+    L.append("mode: rule")
+    L.append("log-level: warning")
+    L.append("ipv6: false")
+    L.append("unified-delay: true")
+    L.append("tcp-concurrent: true")
+    L.append("find-process-mode: strict")
+    L.append("global-client-fingerprint: chrome")
+    L.append("")
+    L.append("profile:")
+    L.append("  store-selected: true")
+    L.append("  store-fake-ip: true")
+    L.append("")
+
+    # DNS：和 Surge / QX 保持同一套思路 —— 只用国内解析器，境外域名交给节点远端解析。
+    # 一旦在 nameserver 里放了境外明文 DNS，等于把每个查询都交给运营商和投毒者。
+    L.append("dns:")
+    L.append("  enable: true")
+    L.append("  ipv6: false")
+    # 不写 listen：iOS 沙箱里绑 0.0.0.0:1053 会失败，
+    # 而 TUN 的 dns-hijack 已经把 53 收进来了，本来也不需要独立监听端口。
+    L.append("  enhanced-mode: fake-ip")
+    L.append("  fake-ip-range: 198.18.0.1/16")
+    L.append("  fake-ip-filter:")
+    for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
+                 "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
+                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'"):
+        L.append(f"    - {item}")
+    L.append("  default-nameserver:")
+    L.append("    - 223.5.5.5")
+    L.append("    - 119.29.29.29")
+    L.append("  # 全部走国内 DoH。境外域名不在这里解析：")
+    L.append("  # 域名会原样交给节点，由节点侧解析，本地不产生任何境外查询。")
+    L.append("  nameserver:")
+    L.append("    - https://dns.alidns.com/dns-query")
+    L.append("    - https://doh.pub/dns-query")
+    L.append("  proxy-server-nameserver:")
+    L.append("    - https://dns.alidns.com/dns-query")
+    L.append("  nameserver-policy:")
+    L.append("    'geosite:cn,private':")
+    L.append("      - https://dns.alidns.com/dns-query")
+    L.append("      - https://doh.pub/dns-query")
+    L.append("")
+
+    L.append("tun:")
+    L.append("  enable: true")
+    L.append("  stack: mixed")
+    L.append("  dns-hijack:")
+    L.append("    - any:53")
+    L.append("  auto-route: true")
+    L.append("  auto-detect-interface: true")
+    L.append("")
+
+    # 嗅探：不少规则靠域名匹配，但有些流量进来时只有 IP。
+    # sniffer 能把 TLS SNI / HTTP Host 捞回来，避免这类流量掉到 GEOIP 兜底。
+    L.append("sniffer:")
+    L.append("  enable: true")
+    L.append("  force-dns-mapping: true")
+    L.append("  parse-pure-ip: true")
+    L.append("  override-destination: false")
+    L.append("  sniff:")
+    L.append("    HTTP:")
+    L.append("      ports: [80, 8080-8880]")
+    L.append("    TLS:")
+    L.append("      ports: [443, 8443]")
+    L.append("    QUIC:")
+    L.append("      ports: [443, 8443]")
+    L.append("")
+
+    L.append("geodata-mode: true")
+    L.append("geo-auto-update: true")
+    L.append("geox-url:")
+    L.append("  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat")
+    L.append("  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat")
+    L.append("  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb")
+    L.append("")
+
+    # 占位节点：必须真实存在，否则 proxy-groups 引用会校验失败
+    L.append("# 占位节点：换成自己的，或改用下面的 proxy-providers")
+    L.append("proxies:")
+    for name in ("Lightsail Singapore HY2", "Lightsail Singapore",
+                 "Oracle San Jose", "Google Oregon"):
+        L.append(f"  - name: {clash_yaml_scalar(name)}")
+        L.append("    type: ss")
+        L.append("    server: 127.0.0.1")
+        L.append("    port: 8388")
+        L.append("    cipher: chacha20-ietf-poly1305")
+        L.append("    password: 'REPLACE_ME'")
+        L.append("    udp: true")
+    L.append("")
+
+    L.append("# 有订阅链接的话，用这个替代上面的 proxies（节点会自动更新）")
+    L.append("# proxy-providers:")
+    L.append("#   my-sub:")
+    L.append(f"#     type: http")
+    L.append("#     url: 'https://example.com/sub?token=xxx'")
+    L.append("#     interval: 86400")
+    L.append("#     path: ./providers/my-sub.yaml")
+    L.append("#     health-check:")
+    L.append("#       enable: true")
+    L.append("#       url: http://cp.cloudflare.com/generate_204")
+    L.append("#       interval: 300")
+    L.append("")
+
+    # 策略组：与 Surge / QX 完全同构，只是语法不同
+    L.append("proxy-groups:")
+    for fg in fb_groups:
+        L.append(f"  - name: {clash_yaml_scalar(fg['name'])}")
+        L.append(f"    type: {fg['type']}")
+        L.append("    url: http://cp.cloudflare.com/generate_204")
+        L.append(f"    interval: {fg.get('interval', 300)}")
+        L.append(f"    tolerance: {fg.get('tolerance', 50)}")
+        L.append("    proxies:")
+        for m in fg.get("proxies", []):
+            L.append(f"      - {clash_yaml_scalar(m)}")
+    for p in policies:
+        L.append(f"  - name: {clash_yaml_scalar(p['name'])}")
+        L.append("    type: select")
+        L.append("    proxies:")
+        seen_m = []
+        for m in p.get("proxies", []):
+            if m not in seen_m:
+                seen_m.append(m)
+                L.append(f"      - {clash_yaml_scalar(m)}")
+        # 兜底：节点全挂时至少还能上网。已有就不重复加。
+        if "DIRECT" not in seen_m:
+            L.append("      - DIRECT")
+    L.append("")
+
+    # rule-providers
+    L.append("rule-providers:")
+    for rule_id, _target, _n in provider_ids:
+        L.append(f"  {rule_id}:")
+        L.append("    type: http")
+        L.append("    behavior: classical")
+        L.append("    format: yaml")
+        L.append(f"    url: {clash_yaml_scalar(f'{base_url}/clash/rules/{rule_id}.yaml')}")
+        L.append("    interval: 86400")
+        L.append(f"    path: ./rules/{rule_id}.yaml")
+    L.append("")
+
+    # rules：顺序与 Surge 完全一致，三端行为才能对齐
+    L.append("rules:")
+    L.append("  # ===== 1. 进程级（macOS 专享，域名规则漏了也能兜住）=====")
+    for r in config["rule_sources"]:
+        for proc in r.get("process", []):
+            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
+
+    L.append("  # ===== 2. 局域网与自己的服务器：直连，不绕道 =====")
+    for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
+                 "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"):
+        L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
+    L.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
+    L.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
+    L.append("  - IP-CIDR,152.70.126.105/32,DIRECT,no-resolve")
+    L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
+
+    L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
+    for r in config["rule_sources"]:
+        rule_id = r["id"]
+        r_type = r.get("type")
+        if r_type == "GEOIP":
+            L.append(f"  - GEOIP,{r.get('country', 'CN')},{r['target']}")
+        elif r_type == "FINAL":
+            L.append(f"  - MATCH,{r['target']}")
+        elif any(pid == rule_id for pid, _t, _n in provider_ids):
+            L.append(f"  - RULE-SET,{rule_id},{r['target']}")
+    L.append("")
+
+    write_text(CLASH_DIST / "config.example.yaml", "\n".join(L) + "\n")
+    total = sum(n for _i, _t, n in provider_ids)
+    print(f"   -> [Clash] {len(provider_ids)} 个 rule-provider / {total} 条规则 / 模板已生成")
+    return provider_ids
+
+
+def parse_nodes_for_clash():
+    """收集本机真实节点，供个人 Clash 配置使用。
+
+    两个来源，能读到哪个用哪个：
+      1. user_qx_input.txt 的 [server_local]（仓库内，gitignored）
+      2. Surge 的 Proxy.dconf（仓库外，仅本机存在时读取，能多拿到 HY2 节点）
+
+    返回 Clash proxies 列表（dict）。读不到就返回空列表，调用方降级。
+    """
+    nodes = []
+    seen = set()
+
+    def add(node):
+        # 按「名字」去重，不是按 server:port。
+        # 同一个节点在 Surge 和 QX 里可能写成不同端口（Google Oregon 就是
+        # Proxy.dconf 写 443、user_qx_input 写 10086，两个端口都通），
+        # 按地址去重会留下两个同名节点，mihomo 会直接判配置非法。
+        name = node.get("name")
+        if not name or name in seen:
+            return
+        seen.add(name)
+        nodes.append(node)
+
+    # 1. Surge 的 Proxy.dconf（优先：它是当前实际在用的定义）
+    surge_proxy = Path.home() / "Library" / "Application Support" / "Surge" / "Profiles" / "Proxy.dconf"
+    if surge_proxy.exists():
+        for line in read_text(surge_proxy).splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith("[") or "=" not in s:
+                continue
+            name, _, rhs = s.partition("=")
+            parts = [p.strip() for p in rhs.split(",")]
+            if len(parts) < 3:
+                continue
+            kind = parts[0].lower()
+            opts = {}
+            for item in parts[3:]:
+                if "=" in item:
+                    k, _, v = item.partition("=")
+                    opts[k.strip().lower()] = v.strip()
+            if kind == "ss":
+                add({
+                    "name": name.strip(), "type": "ss",
+                    "server": parts[1], "port": int(parts[2]),
+                    "cipher": opts.get("encrypt-method", "chacha20-ietf-poly1305"),
+                    "password": opts.get("password", ""), "udp": True,
+                })
+            elif kind == "hysteria2":
+                node = {
+                    "name": name.strip(), "type": "hysteria2",
+                    "server": parts[1], "port": int(parts[2]),
+                    "password": opts.get("password", ""),
+                }
+                if opts.get("sni"):
+                    node["sni"] = opts["sni"]
+                if opts.get("skip-cert-verify", "").lower() == "true":
+                    node["skip-cert-verify"] = True
+                add(node)
+
+    # 2. QX 的 [server_local]（仓库内，CI 里也能用；同名节点让位给 Surge 的定义）
+    src = BASE_DIR / "user_qx_input.txt"
+    if src.exists():
+        text = read_text(src)
+        m = re.search(r"^\[server_local\]\s*$(.*?)(?=^\[)", text, re.S | re.M)
+        for line in (m.group(1) if m else "").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or not s.startswith("shadowsocks="):
+                continue
+            opts = {}
+            head, _, rest = s.partition("=")
+            for item in rest.split(","):
+                item = item.strip()
+                if "=" in item:
+                    k, _, v = item.partition("=")
+                    opts[k.strip()] = v.strip()
+                elif ":" in item and "host" not in opts:
+                    host, _, port = item.rpartition(":")
+                    opts["host"], opts["port"] = host, port
+            if "host" in opts and "tag" in opts:
+                add({
+                    "name": opts["tag"],
+                    "type": "ss",
+                    "server": opts["host"],
+                    "port": int(opts.get("port", 0) or 0),
+                    "cipher": opts.get("method", "chacha20-ietf-poly1305"),
+                    "password": opts.get("password", ""),
+                    "udp": True,
+                })
+    return nodes
+
+
+def generate_personal_clash_config(config, rule_data):
+    """生成本机用的 Clash 配置（含真实节点，gitignored，绝不进仓库）。"""
+    nodes = parse_nodes_for_clash()
+    if not nodes:
+        print("   ⚠️  [Clash] 未找到可用节点，跳过个人配置")
+        return None
+
+    base_url = config["meta"]["base_url"]
+    names = [n["name"] for n in nodes]
+    L = []
+    L.append("# ===== Rules Hub — Clash 个人配置（含节点，请勿提交到仓库）=====")
+    L.append(f"# 生成时间: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
+    L.append(f"# 规则远程托管: {base_url}/clash/rules/  （每日自动更新，无需重导）")
+    L.append("# 节点改了才需要重新生成；规则变了客户端会自己拉。")
+    L.append("")
+    L.append("mixed-port: 7890")
+    L.append("allow-lan: false")
+    L.append("mode: rule")
+    L.append("log-level: warning")
+    L.append("ipv6: false")
+    L.append("unified-delay: true")
+    L.append("tcp-concurrent: true")
+    L.append("find-process-mode: strict")
+    L.append("global-client-fingerprint: chrome")
+    L.append("")
+    L.append("profile:")
+    L.append("  store-selected: true")
+    L.append("  store-fake-ip: true")
+    L.append("")
+    L.append("dns:")
+    L.append("  enable: true")
+    L.append("  ipv6: false")
+    L.append("  enhanced-mode: fake-ip")
+    L.append("  fake-ip-range: 198.18.0.1/16")
+    L.append("  fake-ip-filter:")
+    for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
+                 "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
+                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'"):
+        L.append(f"    - {item}")
+    L.append("  default-nameserver:")
+    L.append("    - 223.5.5.5")
+    L.append("    - 119.29.29.29")
+    L.append("  nameserver:")
+    L.append("    - https://dns.alidns.com/dns-query")
+    L.append("    - https://doh.pub/dns-query")
+    L.append("  proxy-server-nameserver:")
+    L.append("    - https://dns.alidns.com/dns-query")
+    L.append("  nameserver-policy:")
+    L.append("    'geosite:cn,private':")
+    L.append("      - https://dns.alidns.com/dns-query")
+    L.append("      - https://doh.pub/dns-query")
+    L.append("")
+    L.append("tun:")
+    L.append("  enable: true")
+    L.append("  stack: mixed")
+    L.append("  dns-hijack:")
+    L.append("    - any:53")
+    L.append("  auto-route: true")
+    L.append("  auto-detect-interface: true")
+    L.append("")
+    L.append("sniffer:")
+    L.append("  enable: true")
+    L.append("  force-dns-mapping: true")
+    L.append("  parse-pure-ip: true")
+    L.append("  sniff:")
+    L.append("    HTTP:")
+    L.append("      ports: [80, 8080-8880]")
+    L.append("    TLS:")
+    L.append("      ports: [443, 8443]")
+    L.append("    QUIC:")
+    L.append("      ports: [443, 8443]")
+    L.append("")
+    L.append("geodata-mode: true")
+    L.append("geo-auto-update: true")
+    L.append("")
+    L.append("proxies:")
+    for n in nodes:
+        L.append(f"  - name: {clash_yaml_scalar(n['name'])}")
+        L.append(f"    type: {n['type']}")
+        L.append(f"    server: {n['server']}")
+        L.append(f"    port: {n['port']}")
+        if n["type"] == "ss":
+            L.append(f"    cipher: {n['cipher']}")
+        L.append(f"    password: {clash_yaml_scalar(n['password'])}")
+        if n["type"] == "ss":
+            L.append("    udp: true")
+        if n.get("sni"):
+            L.append(f"    sni: {n['sni']}")
+        if n.get("skip-cert-verify"):
+            L.append("    skip-cert-verify: true")
+    L.append("")
+
+    # 策略组：成员只保留「真实存在的节点 + 已定义的组 + DIRECT」。
+    # 之前只允许节点名，结果把 🇸🇬/🇺🇸 这两个容灾组整个过滤掉了 ——
+    # Claude 的成员里少了它，等于容灾链断了。
+    fallback_names = [fg["name"] for fg in config.get("fallback_groups", [])]
+    policy_names = [p["name"] for p in config.get("policies", []) if p.get("type") == "select"]
+    allowed = set(names) | set(fallback_names) | set(policy_names) | {"DIRECT", "REJECT"}
+
+    def members_for(p, self_name):
+        out = []
+        for m in p.get("proxies", []):
+            if m == self_name:          # 不能引用自己，mihomo 会判循环
+                continue
+            if m in allowed and m not in out:
+                out.append(m)
+        if "DIRECT" not in out:
+            out.append("DIRECT")        # 节点全挂时至少还能上网
+        return out
+
+    L.append("proxy-groups:")
+    for fg in config.get("fallback_groups", []):
+        members = [m for m in fg.get("proxies", []) if m in names]
+        if not members:
+            continue
+        L.append(f"  - name: {clash_yaml_scalar(fg['name'])}")
+        L.append(f"    type: {fg['type']}")
+        L.append("    url: http://cp.cloudflare.com/generate_204")
+        L.append(f"    interval: {fg.get('interval', 300)}")
+        L.append(f"    tolerance: {fg.get('tolerance', 50)}")
+        L.append("    proxies:")
+        for m in members:
+            L.append(f"      - {clash_yaml_scalar(m)}")
+    for p in config.get("policies", []):
+        if p.get("type") != "select":
+            continue
+        members = members_for(p, p["name"])
+        if not members:
+            members = [names[0]]
+        L.append(f"  - name: {clash_yaml_scalar(p['name'])}")
+        L.append("    type: select")
+        L.append("    proxies:")
+        for m in members:
+            L.append(f"      - {clash_yaml_scalar(m)}")
+    L.append("")
+
+    L.append("rule-providers:")
+    for r in config.get("rule_sources", []):
+        if "file" not in r:
+            continue
+        rid = r["id"]
+        L.append(f"  {rid}:")
+        L.append("    type: http")
+        L.append("    behavior: classical")
+        L.append("    format: yaml")
+        L.append(f"    url: {clash_yaml_scalar(f'{base_url}/clash/rules/{rid}.yaml')}")
+        L.append("    interval: 86400")
+        L.append(f"    path: ./rules/{rid}.yaml")
+    L.append("")
+
+    L.append("rules:")
+    for r in config["rule_sources"]:
+        for proc in r.get("process", []):
+            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
+    for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
+                 "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"):
+        L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
+    L.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
+    L.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
+    L.append("  - IP-CIDR,152.70.126.105/32,DIRECT,no-resolve")
+    L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
+    for r in config["rule_sources"]:
+        if r.get("type") == "GEOIP":
+            L.append(f"  - GEOIP,{r.get('country', 'CN')},{r['target']}")
+        elif r.get("type") == "FINAL":
+            L.append(f"  - MATCH,{r['target']}")
+        elif "file" in r:
+            L.append(f"  - RULE-SET,{r['id']},{r['target']}")
+    L.append("")
+
+    out = BASE_DIR / "Clash_Personal.yaml"
+    write_text(out, "\n".join(L) + "\n")
+    print(f"   🔒 [Clash] 个人配置已生成: {out}（节点 {len(nodes)} 个）")
+    return out
+
+
 def build_web_admin(config, rule_data):
     """Generate the static Web Admin dashboard for Cloudflare / GitHub Pages."""
     WEB_DIST.mkdir(parents=True, exist_ok=True)
@@ -2008,6 +2552,20 @@ def build_web_admin(config, rule_data):
         </button>
       </div>
 
+      <!-- Clash (mihomo) Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">🐱</span>
+            <div class="card-title">Clash / mihomo (Apple 全平台)</div>
+          </div>
+          <p class="card-desc">rule-provider 远程规则集，适配 ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）。与 Surge、QX 同源同序。</p>
+        </div>
+        <button class="copy-btn" onclick="copyLink('{base_url}/clash/config.example.yaml')">
+          📋 复制 Clash 配置模板
+        </button>
+      </div>
+
       <!-- Merlin Router Card -->
       <div class="card">
         <div>
@@ -2190,6 +2748,10 @@ def main():
     
     print("🔨 Generating Shadowrocket rulesets...")
     build_shadowrocket(config, rule_data)
+
+    print("🔨 Generating Clash (mihomo) rulesets...")
+    build_clash(config, rule_data)
+    generate_personal_clash_config(config, rule_data)
     
     print("🔨 Generating Asuswrt-Merlin soft router custom lists...")
     build_router(config, rule_data)
