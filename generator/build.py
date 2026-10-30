@@ -548,11 +548,21 @@ def build_qx_policy_block(config, node_tags):
 
     # 「自动选择」必须排在引用它的组之前，否则是前向引用。
     # 之前它被放在最后且没有任何组引用 —— 等于一个永远用不到的死组。
+    #
+    # server-tag-regex 绝不能写 .*：server_remote 里可能挂着公共免费订阅，
+    # .* 会把那几十个陌生人维护的节点一并纳入测速，只要它延迟低就被自动切过去，
+    # 流量等于从别人机器上过。这里只锁死 server_local 里的自建节点。
     auto_group = "自动选择"
     has_auto = bool(node_tags)
     if has_auto:
+        # 只用 re.escape 会把空格也转义成 "\ "，QX 的 ICU 正则对未知转义的处理
+        # 不如 Python 宽松，宁可只转义真正的元字符，生成的表达式也更好读。
+        def _esc(tag):
+            return re.sub(r"([\\.^$|?*+()\[\]{}])", r"\\\1", tag)
+
+        safe_tags = "|".join(_esc(t) for t in node_tags)
         lines.append(
-            "url-latency-benchmark=自动选择, server-tag-regex=.*, "
+            f"url-latency-benchmark=自动选择, server-tag-regex=^({safe_tags})$, "
             f"check-interval=900, tolerance=0, img-url={QX_ICONS['自动选择']}"
         )
 
