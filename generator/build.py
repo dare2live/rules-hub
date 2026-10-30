@@ -529,6 +529,17 @@ def build_qx_policy_block(config, node_tags):
     names = {k: QX_NAME_MAP.get(k, k) for k in policies}
     node_set = set(node_tags)
     lines = []
+
+    # 「自动选择」必须排在引用它的组之前，否则是前向引用。
+    # 之前它被放在最后且没有任何组引用 —— 等于一个永远用不到的死组。
+    auto_group = "自动选择"
+    has_auto = bool(node_tags)
+    if has_auto:
+        lines.append(
+            "url-latency-benchmark=自动选择, server-tag-regex=.*, "
+            f"check-interval=900, tolerance=0, img-url={QX_ICONS['自动选择']}"
+        )
+
     for key in order:
         p = policies.get(key)
         if not p:
@@ -548,6 +559,9 @@ def build_qx_policy_block(config, node_tags):
                 continue
             if mm not in members:
                 members.append(mm)
+        # 兜底组（全球加速）末尾挂上自动选择，节点劣化时不用手改
+        if key == "Proxy" and has_auto and auto_group not in members:
+            members.append(auto_group)
         if not members:
             members = ["proxy"]
         name = names[key]
@@ -559,12 +573,6 @@ def build_qx_policy_block(config, node_tags):
         if t not in tail:
             tail.append(t)
     lines.append(f"static=兜底分流, {', '.join(tail)}, img-url={QX_ICONS['兜底分流']}")
-
-    if node_tags:
-        lines.append(
-            "url-latency-benchmark=自动选择, server-tag-regex=^(?!.*(?:网易|墨鱼)).*$, "
-            f"check-interval=900, tolerance=0, img-url={QX_ICONS['自动选择']}"
-        )
     return lines
 
 
@@ -680,6 +688,52 @@ def build_qx_selftest_rules(base_url):
     return [f"^https?:\\/\\/{esc_host}{esc_path} url script-response-body {base_url}/qx/rewrites/selftest.js"]
 
 
+# ===== [dns] 段：直连域名必须走国内解析器 =====
+# QX 的默认 server 是 1.1.1.1 / 8.8.8.8。境外解析器不带 ECS，会把国内 CDN 域名
+# 指到境外节点。实测（路由器上 ping）：
+#   qq.com      1.1.1.1 → 43.169.32.67   301ms  |  223.5.5.5 → 60.29.240.41   18ms
+#   bilibili    1.1.1.1 → 148.153.46.90  241ms  |  223.5.5.5 → 218.60.18.18    2ms
+#   img.alicdn  1.1.1.1 → 8.25.82.183    231ms  |  223.5.5.5 → 124.95.190.99  1.9ms
+#   i0.hdslb    1.1.1.1 → 157.185.179.197 260ms |  223.5.5.5 → 42.59.17.129   7.7ms
+# 而且解析到境外 IP 后，geoip 会判成非 CN，把本该直连的流量送进代理。
+# 所以 rules/direct.txt 里的每个 DOMAIN-SUFFIX 都要派生一条国内 DNS 规则。
+QX_DOMESTIC_DNS = "223.5.5.5"
+
+
+def build_qx_dns_lines():
+    lines = [
+        "no-ipv6",
+        "no-system",
+        f"server={QX_DOMESTIC_DNS}",
+        "server=119.29.29.29",
+        "server=1.1.1.1",
+        "server=8.8.8.8",
+        "# .cn 由 CNNIC 管理，不存在污染问题，整段走国内",
+        f"server=/*.cn/{QX_DOMESTIC_DNS}",
+    ]
+    doms = []
+    direct = BASE_DIR / "rules" / "direct.txt"
+    if direct.exists():
+        for line in read_text(direct).splitlines():
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            parts = [p.strip() for p in s.split(",")]
+            if len(parts) >= 2 and parts[0].upper() == "DOMAIN-SUFFIX":
+                doms.append(parts[1].lower())
+    seen, uniq = set(), []
+    for d in doms:
+        if d not in seen and "." in d:
+            seen.add(d)
+            uniq.append(d)
+    if uniq:
+        lines.append("# 直连域名走国内 DNS（由 rules/direct.txt 自动派生，勿手改）")
+        # 两种写法都写：QX 文档只明确了 /*.x/ 覆盖子域，裸域是否覆盖未说明
+        for d in uniq:
+            lines.append(f"server=/*.{d}/{QX_DOMESTIC_DNS}")
+    return lines
+
+
 def build_qx(config, rule_data, produced=None):
     QX_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
@@ -715,16 +769,9 @@ def build_qx(config, rule_data, produced=None):
     qx.append("server_check_timeout=3000")
     qx.append("")
     qx.append("[dns]")
-    qx.append("no-ipv6")
-    qx.append("no-system")
-    qx.append("server=223.5.5.5")
-    qx.append("server=119.29.29.29")
-    qx.append("server=1.1.1.1")
-    qx.append("server=8.8.8.8")
+    qx.extend(build_qx_dns_lines())
     qx.append("server=/*.icloud.com/119.29.29.29")
     qx.append("server=/*.icloud.com.cn/119.29.29.29")
-    qx.append("server=/*.tencent.com/119.29.29.29")
-    qx.append("server=/*.weixin.com/119.29.29.29")
     qx.append("")
     qx.append("[policy]")
     qx.append("# 策略组由 config.yaml 自动派生；无节点时全部回落到内置 proxy，保证可导入")
@@ -979,26 +1026,26 @@ def build_qx_inline_direct_rules():
     return out
 
 
-# 国内解析器兜底：原配置只有 1.1.1.1 / 8.8.8.8，所有域名都走海外 DNS，
-# 国内域名会被解析到「对海外解析器最优」的境外节点，这是 BYD 类 App 报错的常见诱因。
-QX_DOMESTIC_DNS = [
-    "server=/*.cn/223.5.5.5",
-    "server=/*.byd.com/223.5.5.5",
-    "server=/*.bydauto.com/223.5.5.5",
-    "server=/*.bydauto.com.cn/223.5.5.5",
-]
-
-
 def build_qx_dns_block(dns_block):
-    """在原 [dns] 段基础上补齐国内解析器，不覆盖用户已有的自定义解析规则。"""
-    lines = dns_block.splitlines() if dns_block else []
-    if not lines:
-        lines = ["no-ipv6", "no-system", "server=223.5.5.5", "server=119.29.29.29"]
-    existing = {l.strip() for l in lines}
-    extra = [d for d in QX_DOMESTIC_DNS if d not in existing]
-    if extra:
-        lines = lines + ["# 国内域名走国内 DNS（否则会被海外解析器指到境外节点）"] + extra
-    return "\n".join(lines)
+    """[dns] 段统一由 build_qx_dns_lines() 生成。
+
+    原 user_qx_input.txt 里只有 1.1.1.1 / 8.8.8.8 / 8.8.4.4，一个国内解析器都没有，
+    这是「国内 App 图片加载慢 / 加载不出」的直接原因之一（见 build_qx_dns_lines 注释）。
+    用户手写的非标准行仍然保留，避免丢掉自定义配置。
+    """
+    out = build_qx_dns_lines()
+    keep = []
+    for line in (dns_block or "").splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("server=") or s in ("no-ipv6", "no-system"):
+            continue
+        keep.append(s)
+    if keep:
+        out.append("# 以下为原配置中保留的自定义项")
+        out.extend(keep)
+    return "\n".join(out)
 
 
 def generate_personal_qx_config(config, produced=None):
