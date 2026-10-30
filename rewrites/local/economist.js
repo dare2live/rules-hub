@@ -1,27 +1,31 @@
 /***********************************
 
-The Economist 付费墙处理（Rules Hub 自托管版）
+The Economist 解锁（Rules Hub 自托管版）
 
-背景：经济学人没有公开的 Quantumult X 解锁脚本。GitHub 全量搜过，
-唯一叫「经济学人」的是 chxm1023 的 jjxrsl.js，但那款针对的是
-「经济学人·商论」（api.hummingbird.businessreview.global），
-而这个域名现在连 DNS 都解析不出来了 —— 服务已经整体下线，无从恢复。
+【App 解锁 —— 主用途】
+经济学人 iOS App 启动时会拉一个机构订阅标记：
 
-所以这份是按 Bypass Paywalls Clean 4.4.7.6 的实现重写的：
-  1. 订阅墙由 Zephr 驱动，入口是 /zephr/feature
-  2. 前端遮罩由 /latest/wall-ui.js 渲染，节点是 div#tp-regwall
-把这两者拦掉，注册墙就不会生成；服务端已经渲染进 HTML 的那部分，
-由本脚本摘掉，并解除 body 的滚动锁。
+    GET https://www.economist.com/api/bulk-subscriber
+    -> {"isBulkSubscriber":false,"meta":{"client_ip":"x.x.x.x"}}
 
-只对网页版（Safari）有效。App 内的订阅校验走的是另一套 API，
-没抓包无法确定字段，不在本脚本范围内。
+App 拿 isBulkSubscriber 决定要不要弹订阅墙。本脚本把它改成 true，
+并保留原始 meta（里面的 client_ip 是真实返回值，去掉反而不自然）。
 
-自托管原因：上游脚本普遍指向个人仓库，删库即静默失效
-（QX 拉不到脚本不报错，只是重写不再生效）。
+这个端点 2026-10-30 实测仍是 HTTP 200、字段名没变，只是值为 false。
+
+【网页版 —— 附带】
+经济学人网页的注册墙由 Zephr 驱动，前端遮罩是 div#tp-regwall。
+脚本会把它从 HTML 里摘掉并解除 body 的 overflow:hidden。
+这部分是附带的，不影响 App；不想用可以只删 rewrite_local 里的文章行。
+
+【为什么自托管】
+上游没有公开的 QX 版本。已知的唯一实现是 KeiKinn/Surge_Script 的
+Paywall.sgmodule，走 Surge 的 Map Local 挂一个本地 JSON（2020 年的文件，
+内容就是 {"meta":{},"isBulkSubscriber":true}）。QX 没有 Map Local，
+所以改成 response-body 脚本，逻辑等价且能保留原始 meta。
 
 [rewrite_local]
-^https:\/\/www\.economist\.com\/zephr\/feature url reject
-^https:\/\/[a-z0-9-]+\.economist\.com\/latest\/wall-ui\.js url reject
+^https:\/\/www\.economist\.com\/api\/bulk-subscriber url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
 ^https:\/\/www\.economist\.com\/[a-z-]+\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
 ^https:\/\/www\.economist\.com\/interactive\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
 
@@ -30,7 +34,44 @@ hostname = www.economist.com
 
 ***********************************/
 
-var REGWALL_IDS = ['tp-regwall'];
+var body = $response.body;
+
+if (!body) {
+    $done({});
+} else {
+    var trimmed = body.replace(/^\s+/, '');
+    var isJson = trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[';
+
+    if (isJson) {
+        // ===== App：机构订阅标记 =====
+        try {
+            var obj = JSON.parse(body);
+            if (obj && typeof obj === 'object' && 'isBulkSubscriber' in obj) {
+                obj.isBulkSubscriber = true;
+                if (!obj.meta || typeof obj.meta !== 'object') {
+                    obj.meta = {};
+                }
+                $done({ body: JSON.stringify(obj) });
+            } else {
+                // 不是订阅标记，别的 JSON 接口一律不碰
+                $done({});
+            }
+        } catch (e) {
+            console.log('Economist: JSON 解析失败，原样放行 -> ' + e);
+            $done({});
+        }
+    } else {
+        // ===== 网页：摘注册墙 + 解滚动锁 =====
+        try {
+            var out = stripDivById(body, 'tp-regwall');
+            out = unlockScroll(out);
+            $done({ body: out });
+        } catch (e) {
+            console.log('Economist: HTML 处理失败，原样放行 -> ' + e);
+            $done({});
+        }
+    }
+}
 
 // 按 id 摘掉一个 div，靠配对计数找闭合标签，避免正则贪婪吃多
 function stripDivById(html, id) {
@@ -63,23 +104,4 @@ function unlockScroll(html) {
             var cleaned = css.replace(/overflow(-y)?\s*:\s*hidden\s*;?/gi, '').trim();
             return cleaned ? '<body' + pre + eq + q + cleaned + q : '<body' + pre;
         });
-}
-
-var body = $response.body;
-if (!body) {
-    $done({});
-} else {
-    try {
-        var out = body;
-        for (var k = 0; k < REGWALL_IDS.length; k++) {
-            out = stripDivById(out, REGWALL_IDS[k]);
-        }
-        out = unlockScroll(out);
-        // 兜底：万一 reject 没命中，把墙脚本的标签也去掉
-        out = out.replace(/<script\b[^>]*(?:wall-ui\.js|\/zephr\/)[^>]*>\s*<\/script>/gi, '');
-        $done({ body: out });
-    } catch (e) {
-        console.log('Economist rewrite 出错，原样放行 -> ' + e);
-        $done({});
-    }
 }
