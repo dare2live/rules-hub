@@ -727,36 +727,71 @@ QX_DOMESTIC_DNS = "223.5.5.5"
 
 
 def build_qx_dns_lines():
+    """生成 QX 的 [dns] 段。
+
+    两条硬约束，缺一条都会出问题：
+
+    1) 默认解析器里不能有境外明文 DNS。
+       [filter_local] 末尾是 `geoip, cn, direct` —— 任何没被前面规则命中的域名，
+       都必须先本地解析出 IP 才能判断归属，这一步是真的会发 DNS 查询。
+       原来默认服务器是 1.1.1.1 / 8.8.8.8，等于把这些查询明文送给境外：
+       蜂窝网络下运营商全程可见，国内对这两个地址的查询还经常被投毒。
+       现在只留国内解析器；境外域名交给代理服务器远端解析，本地一次都不查。
+
+    2) 直连域名的解析必须走国内，且覆盖范围要和 [filter_local] 的直连规则一致。
+       unbreak.txt 之前只进了 filter_local、没进 [dns]，于是 apple.com /
+       icloud.com / crashlytics.com 这些「直连但按境外解析」的域名落到默认服务器，
+       CDN 返回境外节点 —— 慢，而且解析出境外 IP 后 geoip 判成非 CN，
+       本该直连的流量又被送进代理。DOMAIN 精确条目（time.apple.com 等）同理，
+       之前只处理了 DOMAIN-SUFFIX。
+    """
     lines = [
         "no-ipv6",
         "no-system",
         f"server={QX_DOMESTIC_DNS}",
         "server=119.29.29.29",
-        "server=1.1.1.1",
-        "server=8.8.8.8",
+        "# 境外域名不在这里解析：交给代理服务器远端解析，本地不查，天然无泄露",
         "# .cn 由 CNNIC 管理，不存在污染问题，整段走国内",
         f"server=/*.cn/{QX_DOMESTIC_DNS}",
     ]
-    doms = []
-    direct = BASE_DIR / "rules" / "direct.txt"
-    if direct.exists():
-        for line in read_text(direct).splitlines():
+    suffix, exact = [], []
+    for rel in ("rules/unbreak.txt", "rules/direct.txt"):
+        fpath = BASE_DIR / rel
+        if not fpath.exists():
+            continue
+        for line in read_text(fpath).splitlines():
             s = line.strip()
-            if not s or s.startswith("#"):
+            if not s or s.startswith("#") or s.startswith(";"):
                 continue
             parts = [p.strip() for p in s.split(",")]
-            if len(parts) >= 2 and parts[0].upper() == "DOMAIN-SUFFIX":
-                doms.append(parts[1].lower())
-    seen, uniq = set(), []
-    for d in doms:
+            if len(parts) < 2:
+                continue
+            kind, dom = parts[0].upper(), parts[1].lower()
+            if kind == "DOMAIN-SUFFIX":
+                suffix.append(dom)
+            elif kind == "DOMAIN":
+                exact.append(dom)
+            # DOMAIN-KEYWORD 无法表达成 QX 的 server=/.../ 规则，跳过。
+            # BYD 那几条 keyword 都有对应的 DOMAIN-SUFFIX，不会漏。
+
+    seen, uniq_suffix = set(), []
+    for d in suffix:
         if d not in seen and "." in d:
             seen.add(d)
-            uniq.append(d)
-    if uniq:
-        lines.append("# 直连域名走国内 DNS（由 rules/direct.txt 自动派生，勿手改）")
-        # 两种写法都写：QX 文档只明确了 /*.x/ 覆盖子域，裸域是否覆盖未说明
-        for d in uniq:
+            uniq_suffix.append(d)
+    seen, uniq_exact = set(), []
+    for d in exact:
+        if d not in seen and "." in d:
+            seen.add(d)
+            uniq_exact.append(d)
+
+    if uniq_suffix or uniq_exact:
+        lines.append("# 直连域名走国内 DNS（由 rules/unbreak.txt + direct.txt 自动派生，勿手改）")
+        for d in uniq_suffix:
             lines.append(f"server=/*.{d}/{QX_DOMESTIC_DNS}")
+        for d in uniq_exact:
+            # 精确域名用 /x/ 写法：/*.x/ 要求必须有子域，裸域会漏掉
+            lines.append(f"server=/{d}/{QX_DOMESTIC_DNS}")
     return lines
 
 
