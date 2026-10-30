@@ -2171,6 +2171,20 @@ def build_private_node_subs():
     print(f"   🔒 [私有] 节点订阅已生成: .private/nodes.yaml + nodes.txt（{len(uris)} 个节点）")
 
 
+def private_base_url():
+    """私有订阅的分发地址（Cloudflare Worker）。
+
+    刻意不挂自有域名：主域同时跑着 edgetunnel，是 GFW 的重点目标，
+    更新入口不能跟着它一起挂。
+    """
+    p = BASE_DIR / "worker" / "wrangler.toml"
+    if p.exists():
+        m = re.search(r'DIST_URL\s*=\s*"([^"]+)"', p.read_text(encoding="utf-8"))
+        if m:
+            return m.group(1).rstrip("/")
+    return "https://rules-personal.herokuv2.workers.dev"
+
+
 def build_web_admin(config, rule_data):
     """Generate the static Web Admin dashboard for Cloudflare / GitHub Pages."""
     WEB_DIST.mkdir(parents=True, exist_ok=True)
@@ -2250,7 +2264,9 @@ def build_web_admin(config, rule_data):
         </div>
         """)
     all_rewrites_html = "\n".join(rewrites_cards_html)
-    
+
+    priv_base = private_base_url()
+
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -2569,6 +2585,31 @@ def build_web_admin(config, rule_data):
 
     <!-- Client Copy Grid -->
     <div class="section-title">📲 客户端一键托管与配置订阅</div>
+
+    <!-- Private Subscription Card（真正要用的是这个） -->
+    <div class="card" style="margin-bottom: 1.25rem; border-color: rgba(251, 191, 36, 0.45); background: linear-gradient(135deg, rgba(251,191,36,0.07), rgba(30,41,59,0.9));">
+      <div>
+        <div class="card-header">
+          <span class="card-icon">🔐</span>
+          <div class="card-title">私有订阅 · 含节点（手机上装的是这个）</div>
+        </div>
+        <p class="card-desc">
+          下面那些公开链接只有<strong>规则</strong>，节点是空的 —— 节点带明文口令，不能放在这台公开服务器上。
+          带节点的配置放在 Cloudflare Worker，路径首段是一串随机口令。
+          口令只存在<strong>你自己的浏览器本地</strong>，不上传、不进仓库。
+          <br>口令在 Mac 上跑 <code>python3 scripts/publish_private.py --show</code> 获取。
+        </p>
+        <div id="priv-setup" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <input id="priv-token" type="password" placeholder="粘贴分发口令（或整条订阅链接）"
+                 style="flex: 1; min-width: 240px; padding: 0.6rem 0.8rem; border-radius: 8px;
+                        border: 1px solid var(--card-border); background: var(--bg);
+                        color: var(--text-main); font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem;">
+          <button class="copy-btn" onclick="savePrivToken()">保存口令</button>
+        </div>
+        <div id="priv-links" style="display: none; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+
     <div class="grid">
       <!-- Surge Card -->
       <div class="card">
@@ -2577,10 +2618,10 @@ def build_web_admin(config, rule_data):
             <span class="card-icon">⚡️</span>
             <div class="card-title">Surge 5 (Mac / iOS)</div>
           </div>
-          <p class="card-desc">托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。</p>
+          <p class="card-desc">托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。<br><span style="color: var(--warning);">节点槽位是占位（<code>= direct</code>），日常请用上面的私有订阅。</span></p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/surge/profile.conf')">
-          📋 复制 Surge 托管链接
+          📋 复制 Surge 规则模板（不含节点）
         </button>
       </div>
 
@@ -2591,11 +2632,11 @@ def build_web_admin(config, rule_data):
             <span class="card-icon">🎯</span>
             <div class="card-title">Quantumult X (iOS)</div>
           </div>
-          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，自托管 16+ 核心去广告与 VIP 解锁重写。</p>
+          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，自托管 16+ 核心去广告与 VIP 解锁重写。<br><span style="color: var(--warning);">这份 <code>[server_local]</code> 是空的，日常请用上面的私有订阅。</span></p>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <button class="copy-btn" onclick="copyLink('{base_url}/qx/profile.conf')">
-            📋 复制 QX 完整配置链接
+            📋 复制 QX 规则模板（不含节点）
           </button>
           <button class="copy-btn" style="background: rgba(52, 211, 153, 0.15); border-color: var(--success); color: var(--success);" onclick="copyLink('{base_url}/qx/rewrite_remote.snippet')">
             🛡️ 复制远程重写订阅集合
@@ -2630,10 +2671,10 @@ def build_web_admin(config, rule_data):
             <span class="card-icon">🐱</span>
             <div class="card-title">Clash / mihomo (Apple 全平台)</div>
           </div>
-          <p class="card-desc">rule-provider 远程规则集，适配 ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）。与 Surge、QX 同源同序。</p>
+          <p class="card-desc">rule-provider 远程规则集，适配 ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）。与 Surge、QX 同源同序。<br><span style="color: var(--warning);">这份是占位节点模板，日常请用上面的私有订阅。</span></p>
         </div>
         <button class="copy-btn" onclick="copyLink('{base_url}/clash/config.example.yaml')">
-          📋 复制 Clash 配置模板
+          📋 复制 Clash 规则模板（不含节点）
         </button>
       </div>
 
@@ -2737,6 +2778,74 @@ def build_web_admin(config, rule_data):
         prompt("请手动复制链接:", url);
       }});
     }}
+
+    // ===== 私有订阅：口令只存 localStorage，不上传 =====
+    const PRIV_BASE = '{priv_base}';
+    const PRIV_KEY = 'rh_priv_token';
+
+    function privToken() {{
+      try {{ return localStorage.getItem(PRIV_KEY) || ''; }} catch (e) {{ return ''; }}
+    }}
+
+    function savePrivToken() {{
+      const raw = (document.getElementById('priv-token').value || '').trim();
+      if (!raw) {{ alert('口令不能为空'); return; }}
+      // 支持直接粘贴整条订阅链接，只取口令那一段
+      let v = raw;
+      const scheme = v.indexOf('://');
+      if (scheme >= 0) v = v.slice(scheme + 3);
+      const parts = v.split('/').filter(Boolean);
+      v = parts.length > 1 ? parts[1] : (parts[0] || '');
+      if (!v) {{ alert('没解析出口令，检查一下粘贴的内容'); return; }}
+      try {{ localStorage.setItem(PRIV_KEY, v); }} catch (e) {{ alert('浏览器不允许本地存储'); return; }}
+      document.getElementById('priv-token').value = '';
+      renderPriv();
+    }}
+
+    function clearPrivToken() {{
+      try {{ localStorage.removeItem(PRIV_KEY); }} catch (e) {{}}
+      renderPriv();
+    }}
+
+    function renderPriv() {{
+      const tok = privToken();
+      const setup = document.getElementById('priv-setup');
+      const box = document.getElementById('priv-links');
+      if (!tok) {{
+        setup.style.display = 'flex';
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }}
+      setup.style.display = 'none';
+      const items = [
+        ['🎯 Quantumult X', 'qx.conf', 'var(--accent)'],
+        ['🐱 Clash / mihomo', 'clash.yaml', 'var(--purple)'],
+        ['⚡️ Surge', 'surge.conf', 'var(--success)'],
+      ];
+      let out = '';
+      for (const it of items) {{
+        const url = PRIV_BASE + '/' + tok + '/' + it[1];
+        out += '<button class="copy-btn" style="background:' + it[2] + ';color:#0f172a;" data-url="' +
+               url + '">📋 复制 ' + it[0] + ' 订阅链接</button>';
+      }}
+      out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">';
+      out += '<button class="copy-btn" style="flex:1;background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-open="' +
+             PRIV_BASE + '/' + tok + '/">🔗 打开链接清单页</button>';
+      out += '<button class="copy-btn" style="background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-clear="1">清除口令</button>';
+      out += '</div>';
+      box.innerHTML = out;
+      box.querySelectorAll('button[data-url]').forEach(b => {{
+        b.onclick = () => copyLink(b.getAttribute('data-url'));
+      }});
+      const openBtn = box.querySelector('button[data-open]');
+      if (openBtn) openBtn.onclick = () => window.open(openBtn.getAttribute('data-open'), '_blank');
+      const clearBtn = box.querySelector('button[data-clear]');
+      if (clearBtn) clearBtn.onclick = () => clearPrivToken();
+      box.style.display = 'flex';
+    }}
+
+    renderPriv();
   </script>
 </body>
 </html>
