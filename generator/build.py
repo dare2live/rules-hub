@@ -68,12 +68,19 @@ MITM_OVERRIDES = {
     r".*flyert.*": ["*.flyert.com"],
     r".*zhijianmedia\.cn": ["*.zhijianmedia.cn"],
 }
-# 绝不 MITM：银行 / 支付 / 政务 / 苹果系统服务。
+# 绝不 MITM：银行 / 支付 / 政务 / 身份 / 苹果系统服务。
 # 宁可少去这几个广告，也不要让 App 因为证书校验失败而报错。
+# 判定依据：这些域名一旦 MITM 失败，后果是「打不开 / 登不上」，不是「多一个广告」。
 MITM_DENY_SUFFIX = (
+    # 银行 / 支付 / 征信
     "bankcomm.com", "bankcomm.cn", "ccb.com", "ecitic.com", "pingan.com",
-    "spdb.com.cn", "nhsa.gov.cn", "icbc.com.cn", "abchina.com", "boc.cn",
-    "cmbchina.com", "unionpay.com", "95516.com", "alipay.com", "tenpay.com",
+    "spdb.com.cn", "icbc.com.cn", "abchina.com", "boc.cn", "cmbchina.com",
+    "unionpay.com", "95516.com", "alipay.com", "tenpay.com", "psbc.com",
+    # 政务 / 身份 / 出行凭证
+    "gov.cn", "12306.cn",
+    # 微信安全校验（MITM 后可能登不上，比开屏广告严重得多）
+    "wechat.com",
+    # 苹果系统服务
     "apple.com", "icloud.com",
 )
 # 公网后缀本身不能当通配目标（否则等于 MITM 整个 .com.cn）
@@ -117,6 +124,15 @@ def _host_to_mitm(host):
     return ["*." + suffix]
 
 
+def mitm_allowed(host):
+    """该主机是否允许 MITM（金融 / 政务 / 身份类一律拒绝）。"""
+    h = (host or "").strip().lower()
+    if not h or h in MITM_DENY_EXACT:
+        return False
+    bare = h[2:] if h.startswith("*.") else h
+    return not any(bare == sfx or bare.endswith("." + sfx) for sfx in MITM_DENY_SUFFIX)
+
+
 def derive_mitm_hostnames(paths):
     """从一组重写文件里反推需要 MITM 的主机清单。"""
     hosts = set()
@@ -139,8 +155,7 @@ def derive_mitm_hostnames(paths):
             for item in _expand_alternation(raw):
                 hosts.update(_host_to_mitm(item))
 
-    hosts = {h for h in hosts
-             if not any(h.lstrip("*.").endswith(sfx) for sfx in MITM_DENY_SUFFIX)}
+    hosts = {h for h in hosts if mitm_allowed(h)}
     hosts -= MITM_DENY_EXACT
 
     # 收敛：已经有 *.foo.com 就不再单列 a.foo.com
@@ -955,7 +970,8 @@ def build_rewrites(config):
         if rw.get("enabled", True) and (rw_dist / rw["filename"]).exists()
     ]
     derived = derive_mitm_hostnames(enabled_paths)
-    declared = {h for h in all_hostnames if MITM_HOST_RE.fullmatch(h.strip())}
+    declared = {h.strip() for h in all_hostnames
+                if MITM_HOST_RE.fullmatch(h.strip()) and mitm_allowed(h)}
     # 自检页所在域名必须被 MITM，否则自检永远看不到横幅
     selftest_host = re.sub(r"^https?://", "", base_url).split("/")[0]
     if MITM_HOST_RE.fullmatch(selftest_host):
