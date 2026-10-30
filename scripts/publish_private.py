@@ -50,10 +50,16 @@ def read_namespace_id():
 
 
 def read_domain():
+    """分发地址只认 workers.dev —— 跟自有域名 / VPS 解耦。
+
+    主域同时跑着 edgetunnel 这类服务，是 GFW 的重点目标；
+    更新入口跟着主域一起挂就没法自救了。
+    """
+    fallback = "https://rules-personal.herokuv2.workers.dev"
     if not WRANGLER_TOML.exists():
-        return "https://rules.lifehackers.cc"
-    m = re.search(r'pattern\s*=\s*"([^"]+)"', WRANGLER_TOML.read_text())
-    return f"https://{m.group(1)}" if m else "https://rules.lifehackers.cc"
+        return fallback
+    m = re.search(r'DIST_URL\s*=\s*"([^"]+)"', WRANGLER_TOML.read_text())
+    return m.group(1).rstrip("/") if m else fallback
 
 
 def load_token(rotate=False):
