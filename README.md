@@ -168,6 +168,10 @@ Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignor
 | `/<口令>/nodes.yaml` | 纯节点，Clash `proxy-provider` 格式 | 其它 Clash 客户端 |
 | `/<口令>/nodes.txt` | 纯节点，base64 分享链接 | Shadowrocket / v2rayN / 路由器 |
 
+> 看板页 <https://dare2live.github.io/rules-hub/> 里有一张「私有订阅 · 含节点」卡片：
+> 粘一次口令（存在浏览器 localStorage，不上传），三个订阅链接就直接列出来。
+> 同页其他「配置模板」按钮指向的是**不含节点**的公开文件，别拿错。
+
 ### 改完怎么生效
 
 ```bash
