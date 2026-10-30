@@ -1,0 +1,17 @@
+name = "rules-personal"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 个人配置（含节点明文口令）只存在 KV 里，永不进 git、永不进 gh-pages。
+# 路径首段是 32 字节随机口令，不匹配一律 404。
+kv_namespaces = [
+  { binding = "RULES_PERSONAL", id = "d5b9b4cdbceb45149d735f46d422a94f" }
+]
+
+# 走自有域名而不是 workers.dev —— workers.dev 在国内经常被污染。
+routes = [
+  { pattern = "rules.lifehackers.cc", custom_domain = true }
+]
+
+[observability]
+enabled = true
