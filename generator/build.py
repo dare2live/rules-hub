@@ -530,6 +530,7 @@ QX_ICONS = {
     "Claude": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png",
     "GoogleAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png",
     "WorkBuddy": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
+    "OpenAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png",
     "全球加速": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png",
     "国际媒体": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png",
     "兜底分流": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png",
@@ -540,7 +541,7 @@ QX_ICONS = {
 def build_qx_policy_block(config, node_tags):
     """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。"""
     policies = {p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"}
-    order = ["Proxy", "Media", "Claude", "GoogleAI", "WorkBuddy"]
+    order = ["Proxy", "Media", "Claude", "GoogleAI", "OpenAI", "WorkBuddy"]
     names = {k: QX_NAME_MAP.get(k, k) for k in policies}
     node_set = set(node_tags)
     lines = []
@@ -1400,7 +1401,7 @@ def build_router(config, rule_data):
     # 2. Custom Blacklist / GFWList (Always PROXY on router)
     proxy_lines = []
     for r in config.get("rule_sources", []):
-        if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy", "Media", "Proxy"):
+        if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy", "OpenAI", "Media", "Proxy"):
             rel_path = r.get("file")
             if rel_path and rel_path in rule_data:
                 proxy_lines.extend(rule_data[rel_path])
@@ -2019,6 +2020,12 @@ def build_web_admin(config, rule_data):
             <td><code>GoogleAI</code></td>
             <td><span class="badge badge-us">🇺🇸 美区优选 / 新加坡</span></td>
             <td>测速优选，坚决杜绝香港节点（防锁区）</td>
+          </tr>
+          <tr>
+            <td><strong>ChatGPT / Codex 全生态</strong></td>
+            <td><code>OpenAI</code></td>
+            <td><span class="badge badge-us">🇺🇸 美区优选</span></td>
+            <td>锁定美区出口，规避新加坡出口风控与降智</td>
           </tr>
           <tr>
             <td><strong>腾讯 WorkBuddy AI</strong></td>

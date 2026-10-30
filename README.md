@@ -72,6 +72,7 @@ rules-hub/
 | `DIRECT` | 直连 |
 | `Claude` | Claude / Anthropic，锁定可用地区 |
 | `GoogleAI` | Gemini / Antigravity / Cloud Code |
+| `OpenAI` | ChatGPT / Codex，锁定美区出口 |
 | `WorkBuddy` | 腾讯 AI 服务加速 |
 | `Proxy`（QX 中为「全球加速」） | 通用海外流量 |
 | `Media`（QX 中为「国际媒体」） | 流媒体 |
