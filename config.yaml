@@ -20,7 +20,7 @@ router:
   # 是否同步 cdn.txt（国内 CDN 域名，约 11 万条）。若路由器 DNS 变慢可置为 false
   update_cdn: true
 
-# 1. 核心业务策略组定义（全端统一收敛至 6 个黄金策略组）
+# 1. 核心业务策略组定义（全端统一收敛至固定几个黄金策略组）
 policies:
   - name: "DIRECT"
     type: "direct"
@@ -45,6 +45,16 @@ policies:
       - "Oracle San Jose"
       - "Lightsail Singapore HY2"
       - "Proxy"
+
+  - name: "OpenAI"
+    type: "select"
+    desc: "ChatGPT / Codex 专属通道（锁定美区，OpenAI 对新加坡出口风控更严）"
+    default_select: "🇺🇸 美国自动优选"
+    proxies:
+      - "🇺🇸 美国自动优选"
+      - "Oracle San Jose"
+      - "Google Oregon"
+      - "🇸🇬 新加坡自动备用"
 
   - name: "WorkBuddy"
     type: "select"
@@ -150,9 +160,9 @@ rule_sources:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Spotify/Spotify.list"
 
   - id: "openai"
-    target: "Proxy"
+    target: "OpenAI"
     file: "rules/openai.txt"
-    desc: "OpenAI / ChatGPT / Sora"
+    desc: "OpenAI / ChatGPT / Sora（锁定美区出口）"
     upstream_urls:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/OpenAI/OpenAI.list"
 
