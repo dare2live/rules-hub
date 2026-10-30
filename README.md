@@ -55,6 +55,7 @@ rules-hub/
 | `surge/profile.conf` + `*.list` | Surge 托管配置与模块化规则集 |
 | `qx/profile.conf` + `*.list` | Quantumult X 完整配置（12 个官方段落齐全） |
 | `qx/rewrites/*.conf` | QX 重写脚本，自托管 |
+| `qx/selftest.html` + `qx/rewrites/selftest.js` | 重写链路自检页（见下） |
 | `shadowrocket/*.list` | Shadowrocket 规则集 |
 | `router/fancyss/{chnroute,gfwlist.conf,cdn.txt,version1}` | 梅林 fancyss 规则文件 |
 | `router/ss_rule_sync.sh` | 路由器同步脚本（含 jsDelivr 备用源） |
@@ -77,6 +78,48 @@ rules-hub/
 | `REJECT` | 广告拦截 |
 
 QX 的策略组由 `config.yaml` 派生，并按 `server_local` 中**真实存在的节点标签**过滤，不会引用不存在的节点导致导入失败。
+
+---
+
+## 🔍 Quantumult X 的两个易踩点
+
+这两处配置错一个，表现都是「导入成功、规则在跑、但就是没效果」，排查起来非常费时。
+
+### 1. `[mitm] hostname` 必须写明要解密的主机
+
+QX 的 `hostname` **只支持 `*` 和 `?` 通配符，不认 `-` 排除前缀**。
+写成 `hostname = -*.foo.com, -*bar.com` 等于一条都没匹配上，MITM 目标集为空，
+`[rewrite_remote]` 里所有 HTTPS 重写**静默失效**——不报错、不提示，只是广告还在。
+
+本仓库的做法：从重写规则本身反推需要解密的主机（`derive_mitm_hostnames()`），
+并强制排除金融 / 政务 / 身份类域名（银行、支付、`.gov.cn`、`12306.cn`、微信安全校验）。
+宁可少去几个广告，也不要让 App 因为证书校验失败打不开。
+
+### 2. `[dns]` 里必须有国内解析器，且覆盖直连域名
+
+QX 默认用 `1.1.1.1` / `8.8.8.8`。境外解析器不带 ECS，会把国内 CDN 域名指到境外节点：
+
+| 域名 | 1.1.1.1 | 223.5.5.5 |
+|---|---|---|
+| `www.qq.com` | 43.169.32.67 → **301ms** | 60.29.240.41 → **18ms** |
+| `www.bilibili.com` | 148.153.46.90 → **241ms** | 218.60.18.18 → **2ms** |
+| `img.alicdn.com` | 8.25.82.183 → **231ms** | 124.95.190.99 → **1.9ms** |
+| `i0.hdslb.com` | 157.185.179.197 → **260ms** | 42.59.17.129 → **7.7ms** |
+
+更麻烦的是连锁反应：解析到境外 IP 后 `geoip, cn` 判成非 CN，本该直连的流量被
+`final` 送进代理，再套一层隧道 —— 这就是「图片转圈 / 部分 App 加载不出」的来源。
+
+本仓库的做法：`[dns]` 段由 `rules/direct.txt` 的每个 `DOMAIN-SUFFIX` 自动派生
+`server=/*.<域名>/223.5.5.5`，直连与解析永远保持一致。
+
+### 3. 出问题先看自检页
+
+```
+https://dare2live.github.io/rules-hub/qx/selftest.html
+```
+
+页面顶部出现**绿色横幅** = MITM 与脚本执行链路正常。
+没有横幅就是重写没跑起来，先查证书信任，别去改规则。
 
 ---
 
