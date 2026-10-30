@@ -330,6 +330,18 @@ rewrites:
     enabled: true
     desc: "Bloomberg 数字版订阅解锁（上游已删除，改为本地维护）"
 
+  - id: "economist"
+    name: "经济学人付费墙@RulesHub"
+    filename: "economist.js"
+    # 经济学人从来没有公开的 QX 解锁脚本。唯一叫「经济学人」的 jjxrsl.js
+    # 针对的是「经济学人·商论」，其域名 api.hummingbird.businessreview.global
+    # 已停止解析（服务下线），无从恢复。这份按 Bypass Paywalls Clean 的
+    # 实现重写：拦 Zephr 墙脚本 + 摘 div#tp-regwall。仅对网页版有效。
+    local_file: "rewrites/local/economist.js"
+    opt_parser: true
+    enabled: true
+    desc: "经济学人网页版付费墙（拦 Zephr + 摘注册墙；App 内订阅校验不覆盖）"
+
   - id: "missav"
     name: "MissAV"
     filename: "missav.ads.js"
