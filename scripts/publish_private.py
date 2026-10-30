@@ -5,7 +5,12 @@
 为什么不能直接放 gh-pages：
     dare2live/rules-hub 是公开仓库，个人配置里带节点明文口令，
     推上去等于把 VPS 密码公开。所以「带节点的那几份」只走 Cloudflare KV，
-    设备端用 https://rules.lifehackers.cc/<口令>/xxx 拉取 —— 路径不可枚举。
+    设备端用 https://rules-personal.herokuv2.workers.dev/<口令>/xxx 拉取
+    —— 路径不可枚举。
+
+为什么用 workers.dev 而不是自有域名：
+    主域同时跑着 edgetunnel 这类服务，是 GFW 的重点目标。
+    更新入口跟主域绑一起，主域被墙那天就没法改配置自救了。
 
 用法:
     python3 scripts/publish_private.py            # 推送全部
