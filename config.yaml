@@ -320,6 +320,16 @@ rewrites:
     enabled: true
     desc: "端传媒会员文章畅读"
 
+  - id: "bloomberg"
+    name: "Bloomberg 订阅解锁@leepyer"
+    filename: "bloomberg.js"
+    # 原作者 leey668 已删除 pyer 仓库（404，且无 fork），上游不可用。
+    # 从 Wayback 2026-02-12 快照恢复后自托管，见 rewrites/local/bloomberg.js。
+    local_file: "rewrites/local/bloomberg.js"
+    opt_parser: true
+    enabled: true
+    desc: "Bloomberg 数字版订阅解锁（上游已删除，改为本地维护）"
+
   - id: "missav"
     name: "MissAV"
     filename: "missav.ads.js"
