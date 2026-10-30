@@ -111,3 +111,169 @@ DOMAIN-KEYWORD,bydservice
 # 兜底：任何含 byd 的域名一律直连（BYD App 动态域名较多）
 DOMAIN-KEYWORD,byd
 
+
+# ===== 国内主流服务（非 .cn 域名）=====
+# 这些域名都是「服务器在国内、但域名不是 .cn」。
+# 不加进来会有两个连锁问题：
+#   1) 分流：geoip 判定依赖 DNS，若被境外 DNS 解析到海外节点，会被 final 送进代理
+#   2) 解析：QX 默认用 1.1.1.1，这些域名会被指到境外 CDN（实测 qq.com 301ms vs 18ms）
+# 加进来之后，既走直连，又会在 [dns] 里自动派生「走国内 DNS」的规则。
+
+# 搜索 / 门户
+DOMAIN-SUFFIX,baidu.com
+DOMAIN-SUFFIX,bdstatic.com
+DOMAIN-SUFFIX,bdimg.com
+DOMAIN-SUFFIX,baidupcs.com
+DOMAIN-SUFFIX,hao123.com
+DOMAIN-SUFFIX,sohu.com
+DOMAIN-SUFFIX,sohucs.com
+DOMAIN-SUFFIX,sina.com.cn
+DOMAIN-SUFFIX,sinaimg.cn
+DOMAIN-SUFFIX,weibo.com
+DOMAIN-SUFFIX,weibo.cn
+DOMAIN-SUFFIX,ifeng.com
+DOMAIN-SUFFIX,netease.com
+DOMAIN-SUFFIX,126.net
+DOMAIN-SUFFIX,126.com
+
+# 腾讯
+DOMAIN-SUFFIX,gtimg.com
+DOMAIN-SUFFIX,myqcloud.com
+DOMAIN-SUFFIX,qcloud.com
+DOMAIN-SUFFIX,tencent-cloud.com
+DOMAIN-SUFFIX,tencent-cloud.net
+DOMAIN-SUFFIX,tencentmusic.com
+DOMAIN-SUFFIX,sogou.com
+DOMAIN-SUFFIX,soso.com
+DOMAIN-SUFFIX,weiyun.com
+
+# 阿里
+DOMAIN-SUFFIX,aliyun.com
+DOMAIN-SUFFIX,aliyuncs.com
+DOMAIN-SUFFIX,tbcdn.cn
+DOMAIN-SUFFIX,mmstat.com
+DOMAIN-SUFFIX,1688.com
+
+# 字节
+DOMAIN-SUFFIX,douyin.com
+DOMAIN-SUFFIX,bytedance.com
+DOMAIN-SUFFIX,byteimg.com
+DOMAIN-SUFFIX,pstatp.com
+DOMAIN-SUFFIX,toutiao.com
+DOMAIN-SUFFIX,ixigua.com
+DOMAIN-SUFFIX,zijieapi.com
+DOMAIN-SUFFIX,volccdn.com
+DOMAIN-SUFFIX,bytecdn.cn
+# snssdk.com 不列直连：它同时是 TikTok 的 API 域名，已在 tiktok.list 里走代理
+
+# 哔哩哔哩
+DOMAIN-SUFFIX,hdslb.com
+DOMAIN-SUFFIX,bilivideo.com
+DOMAIN-SUFFIX,biliimg.com
+DOMAIN-SUFFIX,biliapi.net
+
+# 小红书 / 快手
+DOMAIN-SUFFIX,xiaohongshu.com
+DOMAIN-SUFFIX,xhscdn.com
+DOMAIN-SUFFIX,xhslink.com
+DOMAIN-SUFFIX,kuaishou.com
+DOMAIN-SUFFIX,kwaicdn.com
+DOMAIN-SUFFIX,gifshow.com
+DOMAIN-SUFFIX,kwimgs.com
+DOMAIN-SUFFIX,yximgs.com
+
+# 电商
+DOMAIN-SUFFIX,pinduoduo.com
+DOMAIN-SUFFIX,yangkeduo.com
+DOMAIN-SUFFIX,pddpic.com
+DOMAIN-SUFFIX,suning.com
+DOMAIN-SUFFIX,vip.com
+
+# 生活服务 / 出行
+DOMAIN-SUFFIX,meituan.com
+DOMAIN-SUFFIX,meituan.net
+DOMAIN-SUFFIX,dianping.com
+DOMAIN-SUFFIX,mtyun.com
+DOMAIN-SUFFIX,ele.me
+DOMAIN-SUFFIX,elemecdn.com
+DOMAIN-SUFFIX,xiaojukeji.com
+DOMAIN-SUFFIX,didistatic.com
+DOMAIN-SUFFIX,autonavi.com
+DOMAIN-SUFFIX,ctrip.com
+DOMAIN-SUFFIX,qunar.com
+DOMAIN-SUFFIX,ly.com
+
+# 内容 / 社区 / 开发者
+DOMAIN-SUFFIX,zhihu.com
+DOMAIN-SUFFIX,zhimg.com
+DOMAIN-SUFFIX,douban.com
+DOMAIN-SUFFIX,doubanio.com
+DOMAIN-SUFFIX,csdn.net
+DOMAIN-SUFFIX,cnblogs.com
+DOMAIN-SUFFIX,gitee.com
+DOMAIN-SUFFIX,oschina.net
+DOMAIN-SUFFIX,juejin.cn
+DOMAIN-SUFFIX,jianshu.com
+DOMAIN-SUFFIX,36kr.com
+DOMAIN-SUFFIX,huxiu.com
+DOMAIN-SUFFIX,sspai.com
+DOMAIN-SUFFIX,smzdm.com
+
+# 音视频
+DOMAIN-SUFFIX,iqiyi.com
+DOMAIN-SUFFIX,qiyipic.com
+DOMAIN-SUFFIX,youku.com
+DOMAIN-SUFFIX,tudou.com
+DOMAIN-SUFFIX,alikunlun.com
+DOMAIN-SUFFIX,migu.cn
+DOMAIN-SUFFIX,cmvideo.cn
+DOMAIN-SUFFIX,ximalaya.com
+DOMAIN-SUFFIX,xmcdn.com
+DOMAIN-SUFFIX,kuwo.cn
+DOMAIN-SUFFIX,kugou.com
+
+# 手机厂商
+DOMAIN-SUFFIX,mi.com
+DOMAIN-SUFFIX,xiaomi.com
+DOMAIN-SUFFIX,miui.com
+DOMAIN-SUFFIX,xiaomi.net
+DOMAIN-SUFFIX,huawei.com
+DOMAIN-SUFFIX,hicloud.com
+DOMAIN-SUFFIX,dbankcdn.com
+DOMAIN-SUFFIX,huaweicloud.com
+DOMAIN-SUFFIX,vmall.com
+DOMAIN-SUFFIX,oppo.com
+DOMAIN-SUFFIX,heytapmobi.com
+DOMAIN-SUFFIX,allawnos.com
+DOMAIN-SUFFIX,lenovo.com.cn
+DOMAIN-SUFFIX,lenovomm.com
+
+# 办公 / 工具
+DOMAIN-SUFFIX,wps.cn
+DOMAIN-SUFFIX,kdocs.cn
+DOMAIN-SUFFIX,jianguoyun.com
+
+# 国内 CDN 厂商（客户域名直连时要用到）
+DOMAIN-SUFFIX,wscdns.com
+DOMAIN-SUFFIX,lxdns.com
+DOMAIN-SUFFIX,wsdvs.com
+DOMAIN-SUFFIX,cdntip.com
+DOMAIN-SUFFIX,chinanetcenter.com
+
+# 统计 / 推送（走代理只会更慢）
+DOMAIN-SUFFIX,umeng.com
+DOMAIN-SUFFIX,cnzz.com
+DOMAIN-SUFFIX,growingio.com
+DOMAIN-SUFFIX,talkingdata.com
+
+# 其他常用
+DOMAIN-SUFFIX,bitauto.com
+DOMAIN-SUFFIX,ke.com
+DOMAIN-SUFFIX,anjuke.com
+DOMAIN-SUFFIX,58.com
+DOMAIN-SUFFIX,ganji.com
+DOMAIN-SUFFIX,icourse163.org
+DOMAIN-SUFFIX,xueersi.com
+DOMAIN-SUFFIX,zuoyebang.com
+DOMAIN-SUFFIX,qichacha.com
+DOMAIN-SUFFIX,tianyancha.com
