@@ -1,0 +1,28 @@
+name = "ai-workbench"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# 静态前端与 API 同一个 Worker，不依赖 Pages / next-on-pages
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
+
+# 每日北京时间 23:00 推送用量日报（UTC 15:00）
+[triggers]
+crons = ["0 15 * * *"]
+
+[vars]
+CF_GATEWAY_ID = "ai-workbench"
+GOOGLE_API_VERSION = "v1beta"
+# 单人每小时请求上限（best-effort，进程内计数）
+RATE_LIMIT_PER_HOUR = "80"
+
+# 可选：把朋友口令放 KV，方便随时撤销，不用改代码重新部署
+# [[kv_namespaces]]
+# binding = "CODES"
+# id = "<你的 KV namespace id>"

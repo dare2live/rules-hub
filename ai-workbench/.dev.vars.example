@@ -1,0 +1,27 @@
+# 必填：两个口令 + 会话签名密钥
+FRIEND_CODE=friend-a,friend-b
+ADMIN_CODE=change-me-admin
+SESSION_SECRET=change-me-random-32-chars
+
+# Cloudflare 账号与网关
+CF_ACCOUNT_ID=你的32位account id
+CF_GATEWAY_ID=ai-workbench
+CF_API_TOKEN=只勾 Account Analytics Read
+
+# 供应商密钥（放在边缘，绝不下发到浏览器）
+ANTHROPIC_API_KEY=sk-ant-xxxx
+GOOGLE_API_KEY=AIzaSyxxxx
+
+# 可选：AI Gateway 开了 Authenticated Gateway 才需要
+CF_AIG_TOKEN=
+
+# 可选：BYOK 下 cost 恒为 0 时，用单价兜底（单位 USD / 1M tokens）
+COST_ANTHROPIC_IN=
+COST_ANTHROPIC_OUT=
+COST_GOOGLE_IN=
+COST_GOOGLE_OUT=
+
+# 可选：Telegram
+TG_BOT_TOKEN=
+TG_CHAT_ID=
+TG_WEBHOOK_SECRET=

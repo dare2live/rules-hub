@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Workbench</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b8cff'/%3E%3Cpath d='M9 21l7-11 7 11' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div id="login" class="login">
+  <form class="login-card" id="login-form" autocomplete="off">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" width="34" height="34"><rect width="32" height="32" rx="8" fill="#5b8cff"/><path d="M9 21l7-11 7 11" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>AI Workbench</span>
+    </div>
+    <h1>输入访问口令</h1>
+    <p class="hint">口令由管理员发放。无需配置 API Key，登录后直接使用。</p>
+    <input id="code" type="password" name="code" placeholder="访问口令" required autofocus>
+    <button type="submit" id="login-btn">进入</button>
+    <p class="err" id="login-err" role="alert"></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="22" height="22"><rect width="32" height="32" rx="8" fill="#5b8cff"/><path d="M9 21l7-11 7 11" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <select id="model" class="model-select" aria-label="模型"></select>
+    <div class="spacer"></div>
+    <span id="role-chip" class="chip"></span>
+    <button id="btn-usage" class="ghost" hidden>用量</button>
+    <button id="btn-poc" class="ghost" hidden>自检</button>
+    <button id="btn-new" class="ghost" title="清空当前对话">新对话</button>
+  </header>
+
+  <main id="main">
+    <section id="chat-pane">
+      <div id="messages" class="messages">
+        <div class="empty" id="empty">
+          <h2>开始提问</h2>
+          <p>支持拖入图片、PDF、Excel、Word、代码与文本文件。<br>生成的网页或图表会在右侧分屏中预览。</p>
+        </div>
+      </div>
+
+      <div id="composer" class="composer">
+        <div id="chips" class="chips"></div>
+        <div class="input-row">
+          <label class="icon-btn" title="添加附件">
+            <input id="file" type="file" multiple hidden>
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L14 4.5a3.5 3.5 0 015 5L10 18.5a2 2 0 01-3-3l8-8"/></svg>
+          </label>
+          <textarea id="input" rows="1" placeholder="输入问题，或拖入文件…"></textarea>
+          <button id="send" class="send" title="发送 (Enter)">发送</button>
+          <button id="stop" class="send stop" title="停止生成" hidden>停止</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="divider" class="divider" hidden></div>
+
+    <section id="artifact" class="artifact" hidden>
+      <div class="artifact-head">
+        <span id="artifact-title" class="artifact-title">预览</span>
+        <div class="spacer"></div>
+        <button id="artifact-refresh" class="ghost sm">刷新</button>
+        <button id="artifact-open" class="ghost sm">复制</button>
+        <button id="artifact-close" class="ghost sm" title="关闭">✕</button>
+      </div>
+      <iframe id="artifact-frame" class="artifact-frame"
+        sandbox="allow-scripts allow-popups allow-forms allow-modals"
+        referrerpolicy="no-referrer" title="预览"></iframe>
+    </section>
+  </main>
+</div>
+
+<script src="/vendor/marked.min.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

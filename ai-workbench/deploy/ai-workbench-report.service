@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Workbench daily usage report
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aiwb
+Group=aiwb
+WorkingDirectory=/srv/ai-workbench
+EnvironmentFile=/etc/ai-workbench/env
+ExecStart=/usr/bin/node --max-old-space-size=64 /srv/ai-workbench/server/report.mjs
+MemoryMax=96M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

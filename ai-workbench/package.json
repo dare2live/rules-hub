@@ -1,0 +1,15 @@
+{
+  "name": "ai-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Serverless AI 共享工作台：Cloudflare Worker + AI Gateway + 双密令 + 右侧分屏 Artifacts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "serve": "node server/node.mjs",
+    "report": "node server/report.mjs",
+    "test": "node test/smoke.mjs && node test/node-adapter.mjs"
+  }
+}
