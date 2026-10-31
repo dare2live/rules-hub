@@ -56,18 +56,6 @@ hostname = www.economist.com, api.economist.com
 var url = $request.url || '';
 var body = $response.body;
 
-if (!body) {
-    $done({});
-} else if (/[?&]log=1(?:&|$)/.test(url)) {
-    dumpProbe();
-} else if (url.indexOf('cp2-gateway/graphql') >= 0) {
-    handleGraphQL();
-} else if (url.indexOf('/api/bulk-subscriber') >= 0) {
-    handleBulk();
-} else {
-    handleHtml();
-}
-
 // ===================== 分支一：App 的 GraphQL 正文接口 =====================
 
 function handleGraphQL() {
@@ -295,4 +283,21 @@ function prefsSet(key, value) {
             $prefs.setValueForKey(value, key);
         }
     } catch (e) {}
+}
+
+// ===================== 执行入口 =====================
+// 必须放在文件末尾：函数声明会提升，但 FLAG_FALSE / FLAG_TRUE 这类
+// var 赋值不会。写在前面的话，第一次调用 flagKind 时字段表还是 undefined，
+// 整个脚本会静默抛异常、QX 拿不到 $done，表现为 App 一直转圈。
+
+if (!body) {
+    $done({});
+} else if (/[?&]log=1(?:&|$)/.test(url)) {
+    dumpProbe();
+} else if (url.indexOf('cp2-gateway/graphql') >= 0) {
+    handleGraphQL();
+} else if (url.indexOf('/api/bulk-subscriber') >= 0) {
+    handleBulk();
+} else {
+    handleHtml();
 }
