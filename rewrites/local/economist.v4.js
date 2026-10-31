@@ -44,12 +44,12 @@ QX 对远程脚本按 URL 缓存。只改内容、不改文件名时，就算在
 所以每次改逻辑都要换文件名（v3 -> v4 ...），这是唯一可靠的强制刷新手段。
 
 [rewrite_local]
-^https:\/\/www\.economist\.com\/api\/bulk-subscriber url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
-^https:\/\/api\.economist\.com\/teg\/content\/b2c-mobile\/cp2-gateway\/graphql url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
-^https:\/\/www\.economist\.com\/[a-z-]+\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
-^https:\/\/www\.economist\.com\/interactive\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
-^https:\/\/api\.economist\.com\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
-^https:\/\/www\.economist\.com\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v3.js
+^https:\/\/www\.economist\.com\/api\/bulk-subscriber url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
+^https:\/\/api\.economist\.com\/teg\/content\/b2c-mobile\/cp2-gateway\/graphql url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
+^https:\/\/www\.economist\.com\/[a-z-]+\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
+^https:\/\/www\.economist\.com\/interactive\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
+^https:\/\/api\.economist\.com\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
+^https:\/\/www\.economist\.com\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.v4.js
 
 [mitm]
 hostname = www.economist.com, api.economist.com
@@ -285,7 +285,7 @@ function record(u, size) {
     // ArticleQuery / FindHomepage 这些会互相覆盖，只剩最后一条。
     var op = (u.match(/[?&]operationName=([^&]+)/) || [])[1];
     var key = m[1] + (m[2] || '/') + (op ? '  op=' + op : '');
-    var line = key + '  [' + size + ']';
+    var line = key + '  [body=' + size + ']  ' + meta();
 
     var raw = prefsGet('econ.hits') || '';
     var lines = raw ? raw.split('\n') : [];
@@ -305,6 +305,53 @@ function record(u, size) {
         lines = lines.slice(lines.length - 80);
     }
     prefsSet('econ.hits', lines.join('\n'));
+}
+
+// 请求/响应的元信息。body 为 0 时，这几个字段是唯一能说明原因的线索：
+// 是 204 真的没内容，还是被 br/zstd 压过一遍 QX 解不开。
+function meta() {
+    var p = [];
+    try {
+        p.push('m=' + ($request.method || '?'));
+    } catch (e) {}
+    try {
+        p.push('s=' + ($response.statusCode || 0));
+    } catch (e) {}
+    var h = {};
+    try {
+        h = $response.headers || {};
+    } catch (e) {}
+    var ct = pickHeader(h, 'content-type');
+    if (ct) {
+        p.push('ct=' + String(ct).split(';')[0]);
+    }
+    p.push('ce=' + (pickHeader(h, 'content-encoding') || '-'));
+    var cl = pickHeader(h, 'content-length');
+    if (cl) {
+        p.push('cl=' + cl);
+    }
+    return p.join(' ');
+}
+
+function pickHeader(h, name) {
+    for (var k in h) {
+        if (k.toLowerCase() === name) {
+            return h[k];
+        }
+    }
+    return '';
+}
+
+// 正文为空时，把完整响应头存下来，这是判断压缩/空响应的唯一证据
+function saveHeaders() {
+    try {
+        var h = $response.headers || {};
+        var s = JSON.stringify(h);
+        if (s.length > 900) {
+            s = s.slice(0, 900) + '…';
+        }
+        prefsSet('econ.hdr', s);
+    } catch (e) {}
 }
 
 function dumpProbe() {
@@ -333,7 +380,10 @@ function dumpProbe() {
     }
     out.push('');
     out.push('=== 最近一次 GraphQL 响应结构 ===');
-    out.push(probe || '(没有记录到，表示没有任何请求命中 cp2-gateway/graphql)');
+    out.push(probe || '(没有记录到，表示没有拿到正文。看下面那行响应头找原因)');
+    out.push('');
+    out.push('=== 最近一次空响应的完整响应头 ===');
+    out.push(prefsGet('econ.hdr') || '(没有空响应)');
 
     $done({
         body: out.join('\n'),
@@ -383,6 +433,7 @@ if (/[?&]log=1(?:&|$)/.test(url)) {
     if (body) {
         handleGraphQL();
     } else {
+        saveHeaders();
         $done({});
     }
 } else if (url.indexOf('/api/bulk-subscriber') >= 0) {
