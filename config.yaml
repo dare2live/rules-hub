@@ -312,30 +312,6 @@ rewrites:
     enabled: true
     desc: "西窗烛高级会员解锁"
 
-  - id: "initium_media"
-    name: "端传媒"
-    filename: "dcm.js"
-    # ⚠ 已停用：不是脚本过期，是整条路子走不通了。
-    #
-    # 1. 脚本拦的 app.theinitium.com 已经没有任何 DNS 记录（dig 空返回），
-    #    域名下线，规则永远匹配不上。上游 Yuheng0101/X 与本仓库逐字一致，
-    #    它自己也没修。
-    # 2. 端传媒 App 4.0（app-config/v1.json 里 latest.ios = 4.0.0）已经改成
-    #    WebView 套壳：urlPolicy / loadUrl / webViewAllowedHosts 都指向
-    #    theinitium.com，正文就是网页本身。
-    # 3. 站点换成 Ghost，付费墙是服务端下发的。实测付费文章
-    #    theinitium.com/20261029-mainland-debt-spiral-young-female/：
-    #    <article class="ghost-content" data-preview> 整块 3901 字节，
-    #    去掉 <aside class="gh-post-upgrade-cta"> 之后只剩 27 字节，
-    #    正文一个字都没下发。
-    #
-    # 服务端不下发的内容，客户端改写变不出来。只有真实订阅能看。
-    # 若将来找到非付费的内容源（如未设付费的旧文章），再单独开一条。
-    upstream_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Scripts/dcm.js"
-    opt_parser: true
-    enabled: false
-    desc: "端传媒会员文章畅读（已停用：App 4.0 改为 WebView + Ghost 服务端付费墙，正文不下发）"
-
   - id: "bloomberg"
     name: "Bloomberg 订阅解锁@leepyer"
     filename: "bloomberg.js"
