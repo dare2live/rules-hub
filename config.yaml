@@ -315,23 +315,26 @@ rewrites:
   - id: "initium_media"
     name: "端传媒"
     filename: "dcm.js"
-    # 上游 Yuheng0101/X 的 dcm.js 与本仓库逐字一致，但它拦的
-    # app.theinitium.com 已经没有任何 DNS 记录（dig 空返回），域名下线，
-    # 规则永远匹配不上。上游本身也没修。端传媒现在主站是 theinitium.com，
-    # 会员体系迁到了 initium-member-api-prod.initium.workers.dev，
-    # 具体路径未知，先用下面的探针抓一次再改。
+    # ⚠ 已停用：不是脚本过期，是整条路子走不通了。
+    #
+    # 1. 脚本拦的 app.theinitium.com 已经没有任何 DNS 记录（dig 空返回），
+    #    域名下线，规则永远匹配不上。上游 Yuheng0101/X 与本仓库逐字一致，
+    #    它自己也没修。
+    # 2. 端传媒 App 4.0（app-config/v1.json 里 latest.ios = 4.0.0）已经改成
+    #    WebView 套壳：urlPolicy / loadUrl / webViewAllowedHosts 都指向
+    #    theinitium.com，正文就是网页本身。
+    # 3. 站点换成 Ghost，付费墙是服务端下发的。实测付费文章
+    #    theinitium.com/20261029-mainland-debt-spiral-young-female/：
+    #    <article class="ghost-content" data-preview> 整块 3901 字节，
+    #    去掉 <aside class="gh-post-upgrade-cta"> 之后只剩 27 字节，
+    #    正文一个字都没下发。
+    #
+    # 服务端不下发的内容，客户端改写变不出来。只有真实订阅能看。
+    # 若将来找到非付费的内容源（如未设付费的旧文章），再单独开一条。
     upstream_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Scripts/dcm.js"
     opt_parser: true
-    enabled: true
-    desc: "端传媒会员文章畅读（⚠ 上游域名已下线，待修）"
-
-  - id: "initium_probe"
-    name: "端传媒探针(临时)"
-    filename: "dcm.probe.js"
-    local_file: "rewrites/local/dcm.probe.js"
-    opt_parser: true
-    enabled: true
-    desc: "临时诊断：记录端传媒 App 的请求，定位新的会员接口。Safari 打开 theinitium.com/__probe_log 查看"
+    enabled: false
+    desc: "端传媒会员文章畅读（已停用：App 4.0 改为 WebView + Ghost 服务端付费墙，正文不下发）"
 
   - id: "bloomberg"
     name: "Bloomberg 订阅解锁@leepyer"
