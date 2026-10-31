@@ -333,14 +333,17 @@ rewrites:
   - id: "economist"
     name: "经济学人解锁@RulesHub"
     filename: "economist.js"
-    # App 解锁靠的是 /api/bulk-subscriber 这个机构订阅标记（实测仍返回
-    # {"isBulkSubscriber":false,...}，字段名没变），把值改成 true 即可。
+    # App 有两条链路，缺一条都进不去正文：
+    #   ① 启动时的机构订阅标记 /api/bulk-subscriber（isBulkSubscriber）
+    #   ② 点文章时的正文接口 api.economist.com 的移动端 GraphQL 网关
+    # 只拦 ① 的表现是「列表能刷出来，点进去弹订阅墙」——因为列表和正文
+    # 走的是两个域名。② 需要单独把 api.economist.com 放进 [mitm]。
     # 网页版附带摘掉 Zephr 注册墙。上游没有公开的 QX 版本，只有 Surge 的
     # Map Local 模块（KeiKinn/Surge_Script），这里改成 response-body 脚本。
     local_file: "rewrites/local/economist.js"
     opt_parser: true
     enabled: true
-    desc: "经济学人 iOS App 机构订阅解锁（/api/bulk-subscriber）+ 网页注册墙"
+    desc: "经济学人 iOS App 解锁（bulk-subscriber + 移动端 GraphQL 正文）+ 网页注册墙"
 
   - id: "missav"
     name: "MissAV"
