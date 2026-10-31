@@ -42,11 +42,18 @@ Paywall.sgmodule，走 Surge 的 Map Local 挂一个本地 JSON（2020 年的文
 内容就是 {"meta":{},"isBulkSubscriber":true}）。QX 没有 Map Local，
 所以改成 response-body 脚本，逻辑等价且能保留原始 meta。
 
+【文件名为什么带 .app】
+
+QX 对远程脚本按 URL 缓存。只改内容、不改文件名时，就算在 QX 里点了
+「更新资源」，拿到的还是旧脚本本体——线上改了等于没改，而且不报错。
+带 .app 是为了换一次缓存键；以后再改逻辑如果设备上不生效，先怀疑这个，
+把文件名再换一个即可。
+
 [rewrite_local]
-^https:\/\/www\.economist\.com\/api\/bulk-subscriber url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
-^https:\/\/api\.economist\.com\/teg\/content\/b2c-mobile\/cp2-gateway\/graphql url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
-^https:\/\/www\.economist\.com\/[a-z-]+\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
-^https:\/\/www\.economist\.com\/interactive\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.js
+^https:\/\/www\.economist\.com\/api\/bulk-subscriber url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.app.js
+^https:\/\/api\.economist\.com\/teg\/content\/b2c-mobile\/cp2-gateway\/graphql url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.app.js
+^https:\/\/www\.economist\.com\/[a-z-]+\/[0-9]{4}\/[0-9]{2}\/[0-9]{2}\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.app.js
+^https:\/\/www\.economist\.com\/interactive\/ url script-response-body https://dare2live.github.io/rules-hub/qx/rewrites/economist.app.js
 
 [mitm]
 hostname = www.economist.com, api.economist.com
