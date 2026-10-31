@@ -315,10 +315,23 @@ rewrites:
   - id: "initium_media"
     name: "端传媒"
     filename: "dcm.js"
+    # 上游 Yuheng0101/X 的 dcm.js 与本仓库逐字一致，但它拦的
+    # app.theinitium.com 已经没有任何 DNS 记录（dig 空返回），域名下线，
+    # 规则永远匹配不上。上游本身也没修。端传媒现在主站是 theinitium.com，
+    # 会员体系迁到了 initium-member-api-prod.initium.workers.dev，
+    # 具体路径未知，先用下面的探针抓一次再改。
     upstream_url: "https://raw.githubusercontent.com/Yuheng0101/X/main/Scripts/dcm.js"
     opt_parser: true
     enabled: true
-    desc: "端传媒会员文章畅读"
+    desc: "端传媒会员文章畅读（⚠ 上游域名已下线，待修）"
+
+  - id: "initium_probe"
+    name: "端传媒探针(临时)"
+    filename: "dcm.probe.js"
+    local_file: "rewrites/local/dcm.probe.js"
+    opt_parser: true
+    enabled: true
+    desc: "临时诊断：记录端传媒 App 的请求，定位新的会员接口。Safari 打开 theinitium.com/__probe_log 查看"
 
   - id: "bloomberg"
     name: "Bloomberg 订阅解锁@leepyer"
