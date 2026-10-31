@@ -1,0 +1,57 @@
+{
+	# 单站点，关掉 admin API 省内存
+	admin off
+	auto_https disable_redirects
+}
+
+# 8444：避开 Shadowsocks 占用的 443
+# 证书用 HTTP-01，需要 :80 可达（Let's Encrypt 从海外访问，不受大陆 80 封锁影响）
+# 若 80 打不开，改用 DNS-01，见文件末尾注释
+chat.example.com:8444 {
+	root * /srv/ai-workbench/public
+
+	# API 单独走一个 handle：不压缩、不缓冲
+	@api path /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:8787 {
+			# SSE 必须逐块下发，不能攒
+			flush_interval -1
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/ai-workbench.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+		format console
+	}
+}
+
+# --- DNS-01 备选（需要带 cloudflare 插件的 Caddy）---
+# xcaddy build --with github.com/caddy-dns/cloudflare
+#
+# chat.example.com:8444 {
+# 	tls {
+# 		dns cloudflare {env.CF_DNS_API_TOKEN}
+# 		resolvers 1.1.1.1
+# 	}
+# 	...
+# }

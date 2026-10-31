@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily AI Workbench usage report (23:00 Asia/Shanghai)
+
+[Timer]
+OnCalendar=*-*-* 23:00:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

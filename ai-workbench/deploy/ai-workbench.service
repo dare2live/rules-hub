@@ -1,0 +1,33 @@
+[Unit]
+Description=AI Workbench API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aiwb
+Group=aiwb
+WorkingDirectory=/srv/ai-workbench
+EnvironmentFile=/etc/ai-workbench/env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --max-old-space-size=96 /srv/ai-workbench/server/node.mjs
+Restart=always
+RestartSec=3
+
+# 512MB 机器上必须设上限：宁可这个服务被 OOM 杀掉，
+# 也不能让它把 Shadowsocks / Hysteria2 一起拖垮
+MemoryHigh=140M
+MemoryMax=180M
+TasksMax=64
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
