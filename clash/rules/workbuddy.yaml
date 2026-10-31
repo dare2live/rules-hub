@@ -1,0 +1,8 @@
+# 腾讯 WorkBuddy AI
+# 由 rules-hub 自动生成，勿手改。
+# 同源规则：Surge / Quantumult X / Clash 三端内容一致。
+payload:
+  - 'DOMAIN-SUFFIX,workbuddy.ai'
+  - 'DOMAIN-SUFFIX,codebuddy.cn'
+  - 'DOMAIN-KEYWORD,workbuddy'
+  - 'DOMAIN-KEYWORD,codebuddy'

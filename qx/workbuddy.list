@@ -1,0 +1,7 @@
+# 腾讯 WorkBuddy AI (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,workbuddy.ai,WorkBuddy
+HOST-SUFFIX,codebuddy.cn,WorkBuddy
+HOST-KEYWORD,workbuddy,WorkBuddy
+HOST-KEYWORD,codebuddy,WorkBuddy

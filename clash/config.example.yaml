@@ -1,0 +1,298 @@
+# ===== Rules Hub — Clash (mihomo) 配置模板 =====
+# 适用客户端：ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）
+# 规则源：https://dare2live.github.io/rules-hub/clash/rules/  （每日自动更新，客户端按 interval 拉取）
+#
+# 这是公开模板，不含任何真实节点。两种用法：
+#   1) 把自己的节点填进 proxies: 段，替换掉下面的占位项
+#   2) 用 proxy-providers: 挂自己的订阅链接，节点自动更新
+# 想省事就直接用本地生成的 Clash_Personal.yaml（已含节点，不进仓库）。
+
+mixed-port: 7890
+allow-lan: false
+bind-address: '*'
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
+global-client-fingerprint: chrome
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - '+.msftconnecttest.com'
+    - '+.msftncsi.com'
+    - 'time.*.com'
+    - 'stun.*.*'
+    - '+.srv.nintendo.net'
+    - '+.stun.playstation.net'
+    - 'xbox.*.microsoft.com'
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  # 全部走国内 DoH。境外域名不在这里解析：
+  # 域名会原样交给节点，由节点侧解析，本地不产生任何境外查询。
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  proxy-server-nameserver:
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    'geosite:cn,private':
+      - https://dns.alidns.com/dns-query
+      - https://doh.pub/dns-query
+
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - any:53
+  auto-route: true
+  auto-detect-interface: true
+
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+
+geodata-mode: true
+geo-auto-update: true
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb
+
+# 占位节点：换成自己的，或改用下面的 proxy-providers
+proxies:
+  - name: 'Lightsail Singapore HY2'
+    type: ss
+    server: 127.0.0.1
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: 'REPLACE_ME'
+    udp: true
+  - name: 'Lightsail Singapore'
+    type: ss
+    server: 127.0.0.1
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: 'REPLACE_ME'
+    udp: true
+  - name: 'Oracle San Jose'
+    type: ss
+    server: 127.0.0.1
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: 'REPLACE_ME'
+    udp: true
+  - name: 'Google Oregon'
+    type: ss
+    server: 127.0.0.1
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: 'REPLACE_ME'
+    udp: true
+
+# 有订阅链接的话，用这个替代上面的 proxies（节点会自动更新）
+# proxy-providers:
+#   my-sub:
+#     type: http
+#     url: 'https://example.com/sub?token=xxx'
+#     interval: 86400
+#     path: ./providers/my-sub.yaml
+#     health-check:
+#       enable: true
+#       url: http://cp.cloudflare.com/generate_204
+#       interval: 300
+
+proxy-groups:
+  - name: '🇸🇬 新加坡自动备用'
+    type: fallback
+    url: http://cp.cloudflare.com/generate_204
+    interval: 30
+    tolerance: 50
+    proxies:
+      - 'Lightsail Singapore HY2'
+      - 'Lightsail Singapore'
+  - name: '🇺🇸 美国自动优选'
+    type: url-test
+    url: http://cp.cloudflare.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+      - 'Oracle San Jose'
+      - 'Google Oregon'
+  - name: 'Claude'
+    type: select
+    proxies:
+      - 'Lightsail Singapore HY2'
+      - 'Lightsail Singapore'
+      - '🇸🇬 新加坡自动备用'
+      - DIRECT
+  - name: 'GoogleAI'
+    type: select
+    proxies:
+      - '🇺🇸 美国自动优选'
+      - '🇸🇬 新加坡自动备用'
+      - 'Oracle San Jose'
+      - 'Lightsail Singapore HY2'
+      - 'Proxy'
+      - DIRECT
+  - name: 'OpenAI'
+    type: select
+    proxies:
+      - '🇺🇸 美国自动优选'
+      - 'Oracle San Jose'
+      - 'Google Oregon'
+      - '🇸🇬 新加坡自动备用'
+      - DIRECT
+  - name: 'WorkBuddy'
+    type: select
+    proxies:
+      - '🇸🇬 新加坡自动备用'
+      - 'Proxy'
+      - 'DIRECT'
+  - name: 'Proxy'
+    type: select
+    proxies:
+      - '🇸🇬 新加坡自动备用'
+      - '🇺🇸 美国自动优选'
+      - 'Lightsail Singapore HY2'
+      - 'Oracle San Jose'
+      - 'Google Oregon'
+      - 'Lightsail Singapore'
+      - DIRECT
+  - name: 'Media'
+    type: select
+    proxies:
+      - '🇸🇬 新加坡自动备用'
+      - '🇺🇸 美国自动优选'
+      - 'Proxy'
+      - DIRECT
+
+rule-providers:
+  unbreak:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/unbreak.yaml'
+    interval: 86400
+    path: ./rules/unbreak.yaml
+  custom_direct:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/custom_direct.yaml'
+    interval: 86400
+    path: ./rules/custom_direct.yaml
+  claude:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/claude.yaml'
+    interval: 86400
+    path: ./rules/claude.yaml
+  google_ai:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/google_ai.yaml'
+    interval: 86400
+    path: ./rules/google_ai.yaml
+  workbuddy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/workbuddy.yaml'
+    interval: 86400
+    path: ./rules/workbuddy.yaml
+  media:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/media.yaml'
+    interval: 86400
+    path: ./rules/media.yaml
+  openai:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/openai.yaml'
+    interval: 86400
+    path: ./rules/openai.yaml
+  tiktok:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/tiktok.yaml'
+    interval: 86400
+    path: ./rules/tiktok.yaml
+  proxy:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/proxy.yaml'
+    interval: 86400
+    path: ./rules/proxy.yaml
+  reject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: 'https://dare2live.github.io/rules-hub/clash/rules/reject.yaml'
+    interval: 86400
+    path: ./rules/reject.yaml
+
+rules:
+  # ===== 1. 进程级（macOS 专享，域名规则漏了也能兜住）=====
+  - PROCESS-NAME,Claude,Claude
+  - PROCESS-NAME,Gemini,GoogleAI
+  - PROCESS-NAME,agy,GoogleAI
+  - PROCESS-NAME,GeminiAppLauncher,GoogleAI
+  - PROCESS-NAME,WorkBuddy AI,WorkBuddy
+  - PROCESS-NAME,codebuddy,WorkBuddy
+  # ===== 2. 局域网与自己的服务器：直连，不绕道 =====
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  # 把「代理服务器自己的公网 IP」也放进直连，避免流量绕回自己形成环路。
+  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。
+  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT
+  - DOMAIN,sharewithyou.dpdns.org,DIRECT
+  # ===== 3. 规则集（远程托管，每日自动更新）=====
+  - RULE-SET,unbreak,DIRECT
+  - RULE-SET,custom_direct,DIRECT
+  - RULE-SET,claude,Claude
+  - RULE-SET,google_ai,GoogleAI
+  - RULE-SET,workbuddy,WorkBuddy
+  - RULE-SET,media,Media
+  - RULE-SET,openai,OpenAI
+  - RULE-SET,tiktok,Proxy
+  - RULE-SET,proxy,Proxy
+  - RULE-SET,reject,REJECT
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+

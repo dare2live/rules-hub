@@ -1,0 +1,9 @@
+# 防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权） (Quantumult X)
+# Source: Rules Hub
+
+HOST,app.adjust.com,direct
+HOST,analytics.slashdotmedia.com,direct
+HOST,app.appsflyer.com,direct
+HOST-SUFFIX,apple.com,direct
+HOST-SUFFIX,icloud.com,direct
+HOST-SUFFIX,crashlytics.com,direct

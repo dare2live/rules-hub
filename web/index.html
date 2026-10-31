@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rules Hub - 跨端多协议规则托管与运维看板</title>
+  <link rel="icon" href="https://fav.farm/🚀">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --success: #34d399;
+      --warning: #fbbf24;
+      --purple: #a78bfa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 2.3rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+    
+    /* Status banner */
+    .status-banner {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.92rem;
+    }
+    .status-label { color: var(--text-muted); }
+    .status-val { font-weight: 600; color: var(--accent); }
+
+    /* Quick Action Ops Bar */
+    .ops-bar {
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+    .ops-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .ops-buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+    .ops-btn {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+    .ops-btn:hover {
+      border-color: var(--accent);
+      background: #172554;
+      color: #38bdf8;
+    }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px var(--accent-glow);
+      border-color: var(--accent);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .card-icon { font-size: 1.6rem; }
+    .card-title { font-size: 1.15rem; font-weight: 600; }
+    .card-desc {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+      line-height: 1.4;
+    }
+    .copy-btn {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: opacity 0.2s;
+    }
+    .copy-btn:hover { opacity: 0.9; }
+
+    /* Section titles */
+    .section-title {
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.5rem;
+    }
+
+    /* Rule detail cards */
+    .rule-detail-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.85rem;
+    }
+    .rule-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.5rem;
+    }
+    .rule-detail-title {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text-main);
+    }
+    .rule-detail-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-upstream { background: #1e3a8a; color: #93c5fd; }
+    .badge-local { background: #064e3b; color: #6ee7b7; }
+    .badge-sg { background: #064e3b; color: #34d399; }
+    .badge-us { background: #1e3a8a; color: #60a5fa; }
+    .badge-direct { background: #374151; color: #9ca3af; }
+    
+    details {
+      margin-top: 0.5rem;
+    }
+    .toggle-btn {
+      font-size: 0.82rem;
+      color: var(--accent);
+      cursor: pointer;
+      user-select: none;
+    }
+    .rule-code-block {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.78rem;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 0.5rem;
+      white-space: pre-wrap;
+      color: #cbd5e1;
+    }
+
+    /* Table */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow-x: auto;
+      margin-bottom: 2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.75rem 1.2rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+    th { color: var(--text-muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--success);
+      color: #064e3b;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Rules Hub</h1>
+      <p>统一源头维护 • 开源全量融合 • 自动白名单免疫 • 每日零操作自更新</p>
+    </header>
+
+    <!-- Status Banner -->
+    <div class="status-banner">
+      <div class="status-item">
+        <span class="status-label">⏱ 最后编译/同步时间:</span>
+        <span class="status-val">2026-10-31 18:00:35</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">📊 融合规则总数:</span>
+        <span class="status-val">2562 条</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">🔄 自动同步频率:</span>
+        <span class="status-val">每日凌晨 04:00 (Cron)</span>
+      </div>
+    </div>
+
+    <!-- Quick Ops Control Panel -->
+    <div class="ops-bar">
+      <div class="ops-title">🛠 规则维护与源头控制台（点击即可在线操作）</div>
+      <div class="ops-buttons">
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/actions/workflows/deploy.yml" target="_blank">
+          ⚡️ 手动立即触发全量同步
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/config.yaml" target="_blank">
+          ⚙️ 添加/配置开源上游源 (config.yaml)
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/rules/direct.txt" target="_blank">
+          📝 增删直连与白名单 (direct.txt)
+        </a>
+        <a class="ops-btn" href="https://github.com/dare2live/rules-hub" target="_blank">
+          📦 浏览 GitHub 源码仓库
+        </a>
+      </div>
+    </div>
+
+    <!-- Client Copy Grid -->
+    <div class="section-title">📲 客户端一键托管与配置订阅</div>
+
+    <!-- Private Subscription Card（真正要用的是这个） -->
+    <div class="card" style="margin-bottom: 1.25rem; border-color: rgba(251, 191, 36, 0.45); background: linear-gradient(135deg, rgba(251,191,36,0.07), rgba(30,41,59,0.9));">
+      <div>
+        <div class="card-header">
+          <span class="card-icon">🔐</span>
+          <div class="card-title">私有订阅 · 含节点（手机上装的是这个）</div>
+        </div>
+        <p class="card-desc">
+          下面那些公开链接只有<strong>规则</strong>，节点是空的 —— 节点带明文口令，不能放在这台公开服务器上。
+          带节点的配置放在 Cloudflare Worker，路径首段是一串随机口令。
+          口令只存在<strong>你自己的浏览器本地</strong>，不上传、不进仓库。
+          <br>口令在 Mac 上跑 <code>python3 scripts/publish_private.py --show</code> 获取。
+        </p>
+        <div id="priv-setup" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <input id="priv-token" type="password" placeholder="粘贴分发口令（或整条订阅链接）"
+                 style="flex: 1; min-width: 240px; padding: 0.6rem 0.8rem; border-radius: 8px;
+                        border: 1px solid var(--card-border); background: var(--bg);
+                        color: var(--text-main); font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem;">
+          <button class="copy-btn" onclick="savePrivToken()">保存口令</button>
+        </div>
+        <div id="priv-links" style="display: none; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Surge Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">⚡️</span>
+            <div class="card-title">Surge 5 (Mac / iOS)</div>
+          </div>
+          <p class="card-desc">托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。<br><span style="color: var(--warning);">节点槽位是占位（<code>= direct</code>），日常请用上面的私有订阅。</span></p>
+        </div>
+        <button class="copy-btn" onclick="copyLink('https://dare2live.github.io/rules-hub/surge/profile.conf')">
+          📋 复制 Surge 规则模板（不含节点）
+        </button>
+      </div>
+
+      <!-- QX Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">🎯</span>
+            <div class="card-title">Quantumult X (iOS)</div>
+          </div>
+          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，自托管 16+ 核心去广告与 VIP 解锁重写。<br><span style="color: var(--warning);">这份 <code>[server_local]</code> 是空的，日常请用上面的私有订阅。</span></p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="copy-btn" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/profile.conf')">
+            📋 复制 QX 规则模板（不含节点）
+          </button>
+          <button class="copy-btn" style="background: rgba(52, 211, 153, 0.15); border-color: var(--success); color: var(--success);" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrite_remote.snippet')">
+            🛡️ 复制远程重写订阅集合
+          </button>
+          <button class="copy-btn" style="background: rgba(167, 139, 250, 0.15); border-color: var(--purple); color: var(--purple);" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/filter_remote.snippet')">
+            🌐 复制远程分流订阅集合
+          </button>
+          <button class="copy-btn" style="background: rgba(56, 189, 248, 0.15); border-color: var(--accent); color: var(--accent);" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/all.conf')">
+            ⚡️ 复制 All-in-One 整合重写
+          </button>
+        </div>
+      </div>
+
+      <!-- Shadowrocket Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">🚀</span>
+            <div class="card-title">Shadowrocket (iOS)</div>
+          </div>
+          <p class="card-desc">小火箭远程规则集订阅，完美兼容 Hysteria 2 与 Shadowsocks 多协议节点。</p>
+        </div>
+        <button class="copy-btn" onclick="copyLink('https://dare2live.github.io/rules-hub/shadowrocket/claude.list')">
+          📋 复制小火箭规则集
+        </button>
+      </div>
+
+      <!-- Clash (mihomo) Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">🐱</span>
+            <div class="card-title">Clash / mihomo (Apple 全平台)</div>
+          </div>
+          <p class="card-desc">rule-provider 远程规则集，适配 ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）。与 Surge、QX 同源同序。<br><span style="color: var(--warning);">这份是占位节点模板，日常请用上面的私有订阅。</span></p>
+        </div>
+        <button class="copy-btn" onclick="copyLink('https://dare2live.github.io/rules-hub/clash/config.example.yaml')">
+          📋 复制 Clash 规则模板（不含节点）
+        </button>
+      </div>
+
+      <!-- Merlin Router Card -->
+      <div class="card">
+        <div>
+          <div class="card-header">
+            <span class="card-icon">📶</span>
+            <div class="card-title">梅林软路由 (Shadowsocks)</div>
+          </div>
+          <p class="card-desc">软路由 SS 插件黑白名单，Claude/GoogleAI 强制走代理，微信企微强制直连。</p>
+        </div>
+        <button class="copy-btn" onclick="copyLink('https://dare2live.github.io/rules-hub/router/merlin_blacklist.txt')">
+          📋 复制软路由域名列表
+        </button>
+      </div>
+    </div>
+
+    <!-- Quantumult X Rewrites Section -->
+    <div class="section-title">
+      <span>🛡️ Quantumult X 自托管重写与 VIP 解锁列表</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">每日 04:00 自动拉取上游保持最新 • 免翻墙高速分发</span>
+    </div>
+    <div style="margin-bottom: 2rem;">
+      
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">墨鱼去开屏2.0@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">全网主流应用开屏广告拦截（源站按 UA 放行，已适配 Quantumult UA 抓取） • <code>StartUpAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/StartUpAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">油管去广告@Maasea <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">YouTube 视频、瀑布流、短视频广告拦截与画中画支持 • <code>YoutubeAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/YoutubeAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">微博去广告@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">微博去开屏、去信息流广告与热搜净化 • <code>WeiboAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/WeiboAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">喜马拉雅去广告[卸载重装]@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">喜马拉雅去弹窗、横幅及音频流广告 • <code>Ximalaya.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/Ximalaya.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">高德地图净化[卸载重装]@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">高德地图首页及路线推荐广告净化 • <code>AmapAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/AmapAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">微信小程序去广告@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">微信小程序广告与激励广告净化 • <code>Applet.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/Applet.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">小红书净化+去水印@奶思 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">小红书瀑布流广告拦截与无水印原图保存（已迁移至 wool_scripts 维护源） • <code>XiaoHongShuAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/XiaoHongShuAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">雪球净化@奶思 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">雪球开屏与社区推广信息净化（已迁移至 wool_scripts 维护源） • <code>XueQiuAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/XueQiuAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">闲鱼净化 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">闲鱼首页推荐流及商品卡片净化 • <code>GoofishAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/GoofishAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">Spotify音乐VIP[音质≤高]@app2smile <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Spotify 歌曲切歌、无杂音、音质解锁 • <code>spotify.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/spotify.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">墨鱼专属VIP@ddgksf2013 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">多款小众精品 App VIP 功能解锁 • <code>ForOwnUse.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/ForOwnUse.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">波点音乐 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">波点音乐无损音质与 VIP 解锁 • <code>bdyybata1.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/bdyybata1.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">百度网盘 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">百度网盘倍速与画质解锁 • <code>panda.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/panda.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">西窗烛 <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">西窗烛高级会员解锁 • <code>xcz.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/xcz.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">Bloomberg 订阅解锁@leepyer <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Bloomberg 数字版订阅解锁（上游已删除，改为本地维护） • <code>bloomberg.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/bloomberg.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">MissAV <span class="badge badge-sg">✅ 推荐启用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">MissAV 网页去广告与弹窗拦截（本地维护，2026-10 实测广告位） • <code>missav.ads.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/missav.ads.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">彩云天气净化@ddgksf2013 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">彩云天气广告拦截 • <code>CaiYunAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/CaiYunAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">网易云净化@ddgksf2013 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">网易云音乐净化 • <code>NeteaseAds.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/NeteaseAds.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">Safari超级搜索@ddgksf2013 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Safari 快速搜索引擎切换 • <code>Q-Search.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/Q-Search.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">豆瓣网页观影快捷跳转@ddgksf2013 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">豆瓣网页观影快捷跳转 • <code>Douban.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/Douban.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">Google重定向@DivineEngine <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Google 地区重定向修复 • <code>General.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/General.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">微信解锁被屏蔽的URL@zZPiglet <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">微信内置浏览器解锁被封链接 • <code>UnblockURLinWeChat.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/UnblockURLinWeChat.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">BoxJS商店版@chavyleung <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">BoxJS 本地 Web 控制台与订阅商店 • <code>boxjs.rewrite.quanx.conf</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/boxjs.rewrite.quanx.conf')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">口语星球 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">口语星球 VIP 解锁 • <code>kyxq.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/kyxq.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">纳米盒 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">纳米盒 VIP 解锁 • <code>namibox.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/namibox.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">喜马拉雅 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">喜马拉雅 VIP 解锁 • <code>ximalaya.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/ximalaya.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">趣配音 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">英语趣配音 VIP 解锁 • <code>qpy.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/qpy.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">有心跳 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">有心跳 VIP 解锁 • <code>xintiao.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/xintiao.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">酷我音乐 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">酷我音乐 VIP 解锁 • <code>kuwo.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/kuwo.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">FT Chinese <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">FT 中文网会员阅读 • <code>cloudfront.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/cloudfront.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+
+        <div class="rule-detail-card" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem;">
+          <div>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 0.95rem;">有谱么 <span class="badge badge-direct">⚪️ 可选备用</span></div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">有谱么会员吉他谱 • <code>youpume.js</code></div>
+          </div>
+          <button class="copy-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="copyLink('https://dare2live.github.io/rules-hub/qx/rewrites/youpume.js')">
+            📋 复制订阅
+          </button>
+        </div>
+        
+    </div>
+
+    <!-- Rule Details Section -->
+    <div class="section-title">
+      <span>🔍 融合规则源明细与即时检索</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">已开启本地白名单免疫拦截防护</span>
+    </div>
+    <div style="margin-bottom: 2rem;">
+      
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）</div>
+              <div class="rule-detail-meta">分类标识: <code>unbreak</code> | 目标策略: <strong>DIRECT</strong> | 包含规则: <strong>6</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (6 条)</summary>
+            <pre class="rule-code-block">DOMAIN,app.adjust.com
+DOMAIN,analytics.slashdotmedia.com
+DOMAIN,app.appsflyer.com
+DOMAIN-SUFFIX,apple.com
+DOMAIN-SUFFIX,icloud.com
+DOMAIN-SUFFIX,crashlytics.com</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">个人专属项目直连、微信、企业微信、国内银行</div>
+              <div class="rule-detail-meta">分类标识: <code>custom_direct</code> | 目标策略: <strong>DIRECT</strong> | 包含规则: <strong>222</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (222 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,weixin.qq.com
+DOMAIN-SUFFIX,qpic.cn
+DOMAIN-SUFFIX,wechat.com
+DOMAIN-SUFFIX,work.weixin.qq.com
+DOMAIN-SUFFIX,qyapi.weixin.qq.com
+DOMAIN-SUFFIX,mail.qq.com
+DOMAIN-SUFFIX,tencent.com
+DOMAIN-SUFFIX,qq.com
+DOMAIN-SUFFIX,qq.com.cn
+DOMAIN-SUFFIX,dingtalk.com
+DOMAIN-SUFFIX,dingtalkapps.com
+DOMAIN-SUFFIX,alipay.com
+DOMAIN-SUFFIX,alipayobjects.com
+DOMAIN,render.alipay.com
+DOMAIN,mdn.alipayobjects.com
+DOMAIN,gw.alipayobjects.com
+DOMAIN-SUFFIX,taobao.com
+DOMAIN-SUFFIX,tmall.com
+DOMAIN-SUFFIX,alicdn.com
+DOMAIN,gw.alicdn.com
+DOMAIN,amdc.m.taobao.com
+DOMAIN,heic.tbcdn.cn
+DOMAIN-SUFFIX,mxhichina.com
+DOMAIN-SUFFIX,feishu.cn
+DOMAIN-SUFFIX,larksuite.com
+DOMAIN-SUFFIX,jd.com
+DOMAIN-SUFFIX,360buyimg.com
+DOMAIN-SUFFIX,shenzhentong.com
+DOMAIN-SUFFIX,amap.com
+DOMAIN-SUFFIX,163.com
+DOMAIN-SUFFIX,127.net
+DOMAIN,mail.163.com
+DOMAIN-SUFFIX,95588.com
+DOMAIN-SUFFIX,icbc.com.cn
+DOMAIN-SUFFIX,ccb.com
+DOMAIN-SUFFIX,ccb.com.cn
+DOMAIN-SUFFIX,boc.cn
+DOMAIN-SUFFIX,abchina.com
+DOMAIN-SUFFIX,bankcomm.com
+DOMAIN-SUFFIX,cmbchina.com
+DOMAIN-SUFFIX,cmbimg.com
+DOMAIN-SUFFIX,unionpay.com
+DOMAIN-SUFFIX,cup.com.cn
+DOMAIN-SUFFIX,95516.com
+DOMAIN,cloudvip.95516.com
+DOMAIN,hotpatch.cup.com.cn
+DOMAIN-SUFFIX,123ths.com
+DOMAIN-SUFFIX,thsi.cn
+DOMAIN,adm.10jqka.com.cn
+DOMAIN-SUFFIX,joying.com
+... 以及其余 172 条规则</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">Claude & Anthropic 全生态</div>
+              <div class="rule-detail-meta">分类标识: <code>claude</code> | 目标策略: <strong>Claude</strong> | 包含规则: <strong>6</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 Claude</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (6 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,claude.ai
+DOMAIN-SUFFIX,claude.com
+DOMAIN-SUFFIX,clau.de
+DOMAIN-SUFFIX,claudeusercontent.com
+DOMAIN-SUFFIX,anthropic.com
+DOMAIN,cdn.usefathom.com</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">Gemini / Antigravity / Google Cloud Code</div>
+              <div class="rule-detail-meta">分类标识: <code>google_ai</code> | 目标策略: <strong>GoogleAI</strong> | 包含规则: <strong>29</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 Gemini</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (29 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,gemini.google.com
+DOMAIN-SUFFIX,gemini.google
+DOMAIN-SUFFIX,generativeai.google
+DOMAIN-SUFFIX,aistudio.google.com
+DOMAIN-SUFFIX,makersuite.google.com
+DOMAIN-SUFFIX,deepmind.google
+DOMAIN-SUFFIX,deepmind.com
+DOMAIN-SUFFIX,antigravity.google
+DOMAIN-SUFFIX,antigravity-unleash.goog
+DOMAIN-SUFFIX,cloudcode-pa.googleapis.com
+DOMAIN-SUFFIX,generativelanguage.googleapis.com
+DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com
+DOMAIN-SUFFIX,aida.googleapis.com
+DOMAIN-SUFFIX,aisandbox-pa.googleapis.com
+DOMAIN-SUFFIX,geller-pa.googleapis.com
+DOMAIN-SUFFIX,play.googleapis.com
+DOMAIN-SUFFIX,bard.google.com
+DOMAIN-SUFFIX,notebooklm.google
+DOMAIN-SUFFIX,notebooklm.google.com
+DOMAIN,daily-cloudcode-pa.googleapis.com
+DOMAIN,robinfrontend-pa.googleapis.com
+DOMAIN,alkalicore-pa.clients6.google.com
+DOMAIN,alkalimakersuite-pa.clients6.google.com
+DOMAIN,ai.google.dev
+DOMAIN,makersuite.google.com
+DOMAIN-SUFFIX,apis.google.com
+DOMAIN-KEYWORD,colab
+DOMAIN-KEYWORD,developerprofiles
+DOMAIN-KEYWORD,generativelanguage</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">腾讯 WorkBuddy AI</div>
+              <div class="rule-detail-meta">分类标识: <code>workbuddy</code> | 目标策略: <strong>WorkBuddy</strong> | 包含规则: <strong>4</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (4 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,workbuddy.ai
+DOMAIN-SUFFIX,codebuddy.cn
+DOMAIN-KEYWORD,workbuddy
+DOMAIN-KEYWORD,codebuddy</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">主流海外流媒体服务</div>
+              <div class="rule-detail-meta">分类标识: <code>media</code> | 目标策略: <strong>Media</strong> | 包含规则: <strong>1390</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 YouTube</span> <span class="badge badge-upstream">🌐 Netflix</span> <span class="badge badge-upstream">🌐 Spotify</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (1390 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,youtube.com
+DOMAIN-SUFFIX,googlevideo.com
+DOMAIN-SUFFIX,ytimg.com
+DOMAIN-SUFFIX,youtu.be
+DOMAIN-SUFFIX,ggpht.com
+DOMAIN-SUFFIX,netflix.com
+DOMAIN-SUFFIX,netflix.net
+DOMAIN-SUFFIX,nflximg.net
+DOMAIN-SUFFIX,nflxvideo.net
+DOMAIN-SUFFIX,nflxext.com
+DOMAIN-SUFFIX,spotify.com
+DOMAIN-SUFFIX,scdn.co
+DOMAIN-SUFFIX,disneyplus.com
+DOMAIN-SUFFIX,disney-portal.my.onetrust.com
+DOMAIN-SUFFIX,strem.io
+DOMAIN-SUFFIX,stremio.com
+DOMAIN-SUFFIX,metahub.space
+DOMAIN-SUFFIX,tmdb.org
+DOMAIN-SUFFIX,themoviedb.org
+DOMAIN-SUFFIX,opensubtitles.org
+DOMAIN-SUFFIX,opensubtitles.com
+DOMAIN-SUFFIX,torrentio.strem.fun
+DOMAIN-SUFFIX,matchtv.ru
+DOMAIN-SUFFIX,ggpht.cn
+DOMAIN-SUFFIX,gvt1.com
+DOMAIN-SUFFIX,gvt2.com
+DOMAIN-SUFFIX,video.google.com
+DOMAIN-SUFFIX,wide-youtube.l.google.com
+DOMAIN-SUFFIX,withyoutube.com
+DOMAIN-SUFFIX,youtube
+DOMAIN-SUFFIX,youtube-nocookie.com
+DOMAIN-SUFFIX,youtube-ui.l.google.com
+DOMAIN-SUFFIX,youtube.ae
+DOMAIN-SUFFIX,youtube.al
+DOMAIN-SUFFIX,youtube.am
+DOMAIN-SUFFIX,youtube.at
+DOMAIN-SUFFIX,youtube.az
+DOMAIN-SUFFIX,youtube.ba
+DOMAIN-SUFFIX,youtube.be
+DOMAIN-SUFFIX,youtube.bg
+DOMAIN-SUFFIX,youtube.bh
+DOMAIN-SUFFIX,youtube.bo
+DOMAIN-SUFFIX,youtube.by
+DOMAIN-SUFFIX,youtube.ca
+DOMAIN-SUFFIX,youtube.cat
+DOMAIN-SUFFIX,youtube.ch
+DOMAIN-SUFFIX,youtube.cl
+DOMAIN-SUFFIX,youtube.co
+DOMAIN-SUFFIX,youtube.co.ae
+DOMAIN-SUFFIX,youtube.co.at
+... 以及其余 1340 条规则</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">OpenAI / ChatGPT / Sora（锁定美区出口）</div>
+              <div class="rule-detail-meta">分类标识: <code>openai</code> | 目标策略: <strong>OpenAI</strong> | 包含规则: <strong>36</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 OpenAI</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (36 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,openai.com
+DOMAIN-SUFFIX,chatgpt.com
+DOMAIN-SUFFIX,oaistatic.com
+DOMAIN-SUFFIX,oaiusercontent.com
+DOMAIN-SUFFIX,sora.com
+DOMAIN-SUFFIX,identrust.com
+DOMAIN,browser-intake-datadoghq.com
+DOMAIN,chat.openai.com.cdn.cloudflare.net
+DOMAIN,openai-api.arkoselabs.com
+DOMAIN,openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net
+DOMAIN,openaicomproductionae4b.blob.core.windows.net
+DOMAIN,production-openaicom-storage.azureedge.net
+DOMAIN,static.cloudflareinsights.com
+DOMAIN-SUFFIX,ai.com
+DOMAIN-SUFFIX,algolia.net
+DOMAIN-SUFFIX,api.statsig.com
+DOMAIN-SUFFIX,auth0.com
+DOMAIN-SUFFIX,chatgpt.livekit.cloud
+DOMAIN-SUFFIX,client-api.arkoselabs.com
+DOMAIN-SUFFIX,events.statsigapi.net
+DOMAIN-SUFFIX,featuregates.org
+DOMAIN-SUFFIX,host.livekit.cloud
+DOMAIN-SUFFIX,intercom.io
+DOMAIN-SUFFIX,intercomcdn.com
+DOMAIN-SUFFIX,launchdarkly.com
+DOMAIN-SUFFIX,observeit.net
+DOMAIN-SUFFIX,openaiapi-site.azureedge.net
+DOMAIN-SUFFIX,openaicom.imgix.net
+DOMAIN-SUFFIX,segment.io
+DOMAIN-SUFFIX,sentry.io
+DOMAIN-SUFFIX,stripe.com
+DOMAIN-SUFFIX,turn.livekit.cloud
+DOMAIN-KEYWORD,openai
+IP-CIDR,24.199.123.28/32
+IP-CIDR,64.23.132.171/32
+IP-ASN,20473,no-resolve</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">TikTok 全生态</div>
+              <div class="rule-detail-meta">分类标识: <code>tiktok</code> | 目标策略: <strong>Proxy</strong> | 包含规则: <strong>36</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 TikTok</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (36 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,tiktok.com
+DOMAIN-SUFFIX,tiktokcdn.com
+DOMAIN-SUFFIX,tiktokv.com
+DOMAIN-SUFFIX,byteoversea.com
+DOMAIN-SUFFIX,ibytedtos.com
+DOMAIN-SUFFIX,ibyteimg.com
+DOMAIN-SUFFIX,ipstatp.com
+DOMAIN-SUFFIX,muscdn.com
+DOMAIN-SUFFIX,musical.ly
+DOMAIN,lf16-effectcdn.byteeffecttos-g.com
+DOMAIN,lf16-pkgcdn.pitaya-clientai.com
+DOMAIN,p16-tiktokcdn-com.akamaized.net
+DOMAIN,trae-api-sg.mchost.guru
+DOMAIN-SUFFIX,bytedapm.com
+DOMAIN-SUFFIX,bytegecko-i18n.com
+DOMAIN-SUFFIX,byteintlapi.com
+DOMAIN-SUFFIX,capcut.com
+DOMAIN-SUFFIX,capcutapi.com
+DOMAIN-SUFFIX,capcutapi.us
+DOMAIN-SUFFIX,capcutstatic.com
+DOMAIN-SUFFIX,isnssdk.com
+DOMAIN-SUFFIX,marscode.com
+DOMAIN-SUFFIX,sgpstatp.com
+DOMAIN-SUFFIX,snssdk.com
+DOMAIN-SUFFIX,tik-tokapi.com
+DOMAIN-SUFFIX,tiktokcdn-us.com
+DOMAIN-SUFFIX,tiktokd.net
+DOMAIN-SUFFIX,tiktokd.org
+DOMAIN-SUFFIX,tiktokmusic.app
+DOMAIN-SUFFIX,tiktokv.us
+DOMAIN-SUFFIX,trae.ai
+DOMAIN-SUFFIX,ttwebview.com
+DOMAIN-KEYWORD,musical.ly
+DOMAIN-KEYWORD,tiktok
+USER-AGENT,TikTok*
+PROCESS-NAME,com.zhiliaoapp.musically</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">通用海外常用站点（弥补老旧 GFWList 缺失的现代海外站点与 Stremio 详情页海报）</div>
+              <div class="rule-detail-meta">分类标识: <code>proxy</code> | 目标策略: <strong>Proxy</strong> | 包含规则: <strong>39</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (39 条)</summary>
+            <pre class="rule-code-block">DOMAIN,sharewithyou.dpdns.org
+DOMAIN,hd.rip
+DOMAIN-SUFFIX,fanart.tv
+DOMAIN-SUFFIX,media-amazon.com
+DOMAIN-SUFFIX,imdb.com
+DOMAIN-SUFFIX,thetvdb.com
+DOMAIN-SUFFIX,tvdb.com
+DOMAIN-SUFFIX,x.com
+DOMAIN-SUFFIX,twitter.com
+DOMAIN-SUFFIX,twimg.com
+DOMAIN-SUFFIX,t.co
+DOMAIN-SUFFIX,telegram.org
+DOMAIN-SUFFIX,t.me
+DOMAIN-SUFFIX,telegra.ph
+DOMAIN-SUFFIX,instagram.com
+DOMAIN-SUFFIX,cdninstagram.com
+DOMAIN-SUFFIX,threads.net
+DOMAIN-SUFFIX,github.com
+DOMAIN-SUFFIX,githubusercontent.com
+DOMAIN-SUFFIX,githubassets.com
+DOMAIN-KEYWORD,github
+DOMAIN-SUFFIX,discord.com
+DOMAIN-SUFFIX,discord.gg
+DOMAIN-SUFFIX,reddit.com
+DOMAIN-SUFFIX,redditmedia.com
+DOMAIN-SUFFIX,redditstatic.com
+DOMAIN-SUFFIX,wikipedia.org
+DOMAIN-SUFFIX,wikimedia.org
+DOMAIN-SUFFIX,notion.so
+DOMAIN-SUFFIX,notion.site
+DOMAIN-SUFFIX,perplexity.ai
+DOMAIN-SUFFIX,poe.com
+DOMAIN-SUFFIX,escaping.work
+DOMAIN-SUFFIX,bloomberg.com
+DOMAIN-SUFFIX,rbxcdn.com
+DOMAIN-SUFFIX,roblox.com
+DOMAIN-SUFFIX,rfi.fr
+IP-CIDR,95.161.76.0/20
+DOMAIN-SUFFIX,lifehackers.cc</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">广告与数据分析追踪</div>
+              <div class="rule-detail-meta">分类标识: <code>reject</code> | 目标策略: <strong>REJECT</strong> | 包含规则: <strong>794</strong> 条</div>
+            </div>
+            <div><span class="badge badge-upstream">🌐 Advertising</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (794 条)</summary>
+            <pre class="rule-code-block">DOMAIN-SUFFIX,doubleclick.net
+DOMAIN-SUFFIX,googleadservices.com
+DOMAIN-SUFFIX,googlesyndication.com
+DOMAIN-SUFFIX,adservice.google.com
+DOMAIN-SUFFIX,adcolony.com
+DOMAIN-SUFFIX,unityads.unity3d.com
+DOMAIN-SUFFIX,vungle.com
+DOMAIN-SUFFIX,appsflyer.com
+DOMAIN-SUFFIX,applovin.com
+DOMAIN-SUFFIX,adjust.com
+DOMAIN-SUFFIX,branch.io
+DOMAIN,log.byteoversea.com
+DOMAIN-KEYWORD,-logging.nextmedia.com
+DOMAIN-KEYWORD,-rtb.gravite.net
+DOMAIN-KEYWORD,-s2s.sensic.net
+DOMAIN-KEYWORD,-spiky.clevertap-prod.com
+DOMAIN-KEYWORD,-tracker.biliapi.net
+DOMAIN-KEYWORD,-txtagstore
+DOMAIN-KEYWORD,.engage.3m.
+DOMAIN-KEYWORD,.estream.
+DOMAIN-KEYWORD,.freecontent.
+DOMAIN-KEYWORD,.net.daraz.
+DOMAIN-KEYWORD,.nimiq.
+DOMAIN-KEYWORD,.zooplus.
+DOMAIN-KEYWORD,_vmind.qqvideo.tc.qq.com
+DOMAIN-KEYWORD,a8clk.
+DOMAIN-KEYWORD,a8cv.
+DOMAIN-KEYWORD,ad.ixigua.com
+DOMAIN-KEYWORD,adjust.
+DOMAIN-KEYWORD,adktrack
+DOMAIN-KEYWORD,admdfs
+DOMAIN-KEYWORD,admob
+DOMAIN-KEYWORD,adnewnc
+DOMAIN-KEYWORD,adsame
+DOMAIN-KEYWORD,adsby
+DOMAIN-KEYWORD,adsdk
+DOMAIN-KEYWORD,adsense
+DOMAIN-KEYWORD,adserve2
+DOMAIN-KEYWORD,adserver
+DOMAIN-KEYWORD,adspace
+DOMAIN-KEYWORD,adsyndication
+DOMAIN-KEYWORD,advert
+DOMAIN-KEYWORD,allyes
+DOMAIN-KEYWORD,analysys
+DOMAIN-KEYWORD,analytics-cdn.
+DOMAIN-KEYWORD,anybest.
+DOMAIN-KEYWORD,backstory.ebay.
+DOMAIN-KEYWORD,click.rum.
+DOMAIN-KEYWORD,cmpworker.
+DOMAIN-KEYWORD,cp-home-pl-
+... 以及其余 744 条规则</pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">国内 IP GeoIP 精准直连</div>
+              <div class="rule-detail-meta">分类标识: <code>china_geoip</code> | 目标策略: <strong>DIRECT</strong> | 包含规则: <strong>0</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (0 条)</summary>
+            <pre class="rule-code-block"></pre>
+          </details>
+        </div>
+        
+
+        <div class="rule-detail-card">
+          <div class="rule-detail-header">
+            <div>
+              <div class="rule-detail-title">外网漏斗兜底</div>
+              <div class="rule-detail-meta">分类标识: <code>final</code> | 目标策略: <strong>Proxy</strong> | 包含规则: <strong>0</strong> 条</div>
+            </div>
+            <div><span class="badge badge-local">🏠 本地维护</span></div>
+          </div>
+          <details>
+            <summary class="toggle-btn">🔍 展开查看具体规则清单 (0 条)</summary>
+            <pre class="rule-code-block"></pre>
+          </details>
+        </div>
+        
+    </div>
+
+    <!-- Routing Strategy Map -->
+    <div class="section-title">📊 核心业务策略组映射清单</div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>业务 / 目标服务</th>
+            <th>策略组名称</th>
+            <th>物理走向</th>
+            <th>容灾与选路策略</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Claude 全生态</strong></td>
+            <td><code>Claude</code></td>
+            <td><span class="badge badge-sg">🇸🇬 新加坡专线</span></td>
+            <td>Lightsail HY2 优先，SS 备用自动容灾</td>
+          </tr>
+          <tr>
+            <td><strong>Gemini / Antigravity</strong></td>
+            <td><code>GoogleAI</code></td>
+            <td><span class="badge badge-us">🇺🇸 美区优选 / 新加坡</span></td>
+            <td>测速优选，坚决杜绝香港节点（防锁区）</td>
+          </tr>
+          <tr>
+            <td><strong>ChatGPT / Codex 全生态</strong></td>
+            <td><code>OpenAI</code></td>
+            <td><span class="badge badge-us">🇺🇸 美区优选</span></td>
+            <td>锁定美区出口，规避新加坡出口风控与降智</td>
+          </tr>
+          <tr>
+            <td><strong>腾讯 WorkBuddy AI</strong></td>
+            <td><code>WorkBuddy</code></td>
+            <td><span class="badge badge-sg">🇸🇬 新加坡 / 直连</span></td>
+            <td>EdgeOne 新加坡接入加速</td>
+          </tr>
+          <tr>
+            <td><strong>微信 / 企微 / 钉钉 / 国内银行</strong></td>
+            <td><code>DIRECT</code></td>
+            <td><span class="badge badge-direct">🇨🇳 国内直连</span></td>
+            <td>GeoIP CN + 专属域名白名单，零代理流量</td>
+          </tr>
+          <tr>
+            <td><strong>通用外网 (X / GitHub / 搜索)</strong></td>
+            <td><code>Proxy</code></td>
+            <td><span class="badge badge-sg">🇸🇬 新加坡 / 🇺🇸 美国</span></td>
+            <td>多节点动态优选与自由切换</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">✅ 链接已复制到剪贴板！</div>
+
+  <script>
+    function copyLink(url) {
+      navigator.clipboard.writeText(url).then(() => {
+        const toast = document.getElementById('toast');
+        toast.innerText = '✅ 链接已复制: ' + url;
+        toast.classList.add('show');
+        setTimeout(() => { toast.classList.remove('show'); }, 2500);
+      }).catch(err => {
+        prompt("请手动复制链接:", url);
+      });
+    }
+
+    // ===== 私有订阅：口令只存 localStorage，不上传 =====
+    const PRIV_BASE = 'https://rules-personal.herokuv2.workers.dev';
+    const PRIV_KEY = 'rh_priv_token';
+
+    function privToken() {
+      try { return localStorage.getItem(PRIV_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function savePrivToken() {
+      const raw = (document.getElementById('priv-token').value || '').trim();
+      if (!raw) { alert('口令不能为空'); return; }
+      // 支持直接粘贴整条订阅链接，只取口令那一段
+      let v = raw;
+      const scheme = v.indexOf('://');
+      if (scheme >= 0) v = v.slice(scheme + 3);
+      const parts = v.split('/').filter(Boolean);
+      v = parts.length > 1 ? parts[1] : (parts[0] || '');
+      if (!v) { alert('没解析出口令，检查一下粘贴的内容'); return; }
+      try { localStorage.setItem(PRIV_KEY, v); } catch (e) { alert('浏览器不允许本地存储'); return; }
+      document.getElementById('priv-token').value = '';
+      renderPriv();
+    }
+
+    function clearPrivToken() {
+      try { localStorage.removeItem(PRIV_KEY); } catch (e) {}
+      renderPriv();
+    }
+
+    function renderPriv() {
+      const tok = privToken();
+      const setup = document.getElementById('priv-setup');
+      const box = document.getElementById('priv-links');
+      if (!tok) {
+        setup.style.display = 'flex';
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+      setup.style.display = 'none';
+      const items = [
+        ['🎯 Quantumult X', 'qx.conf', 'var(--accent)'],
+        ['🐱 Clash / mihomo', 'clash.yaml', 'var(--purple)'],
+        ['⚡️ Surge', 'surge.conf', 'var(--success)'],
+      ];
+      let out = '';
+      for (const it of items) {
+        const url = PRIV_BASE + '/' + tok + '/' + it[1];
+        out += '<button class="copy-btn" style="background:' + it[2] + ';color:#0f172a;" data-url="' +
+               url + '">📋 复制 ' + it[0] + ' 订阅链接</button>';
+      }
+      out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">';
+      out += '<button class="copy-btn" style="flex:1;background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-open="' +
+             PRIV_BASE + '/' + tok + '/">🔗 打开链接清单页</button>';
+      out += '<button class="copy-btn" style="background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-clear="1">清除口令</button>';
+      out += '</div>';
+      box.innerHTML = out;
+      box.querySelectorAll('button[data-url]').forEach(b => {
+        b.onclick = () => copyLink(b.getAttribute('data-url'));
+      });
+      const openBtn = box.querySelector('button[data-open]');
+      if (openBtn) openBtn.onclick = () => window.open(openBtn.getAttribute('data-open'), '_blank');
+      const clearBtn = box.querySelector('button[data-clear]');
+      if (clearBtn) clearBtn.onclick = () => clearPrivToken();
+      box.style.display = 'flex';
+    }
+
+    renderPriv();
+  </script>
+</body>
+</html>

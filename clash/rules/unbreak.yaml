@@ -1,0 +1,10 @@
+# 防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）
+# 由 rules-hub 自动生成，勿手改。
+# 同源规则：Surge / Quantumult X / Clash 三端内容一致。
+payload:
+  - 'DOMAIN,app.adjust.com'
+  - 'DOMAIN,analytics.slashdotmedia.com'
+  - 'DOMAIN,app.appsflyer.com'
+  - 'DOMAIN-SUFFIX,apple.com'
+  - 'DOMAIN-SUFFIX,icloud.com'
+  - 'DOMAIN-SUFFIX,crashlytics.com'

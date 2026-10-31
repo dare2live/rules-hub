@@ -1,0 +1,8 @@
+# 防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权） (Shadowrocket)
+
+DOMAIN,app.adjust.com
+DOMAIN,analytics.slashdotmedia.com
+DOMAIN,app.appsflyer.com
+DOMAIN-SUFFIX,apple.com
+DOMAIN-SUFFIX,icloud.com
+DOMAIN-SUFFIX,crashlytics.com

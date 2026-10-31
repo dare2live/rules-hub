@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rules Hub 重写自检</title>
+<style>
+  body{margin:0;padding:56px 20px 40px;font:16px/1.7 -apple-system,"PingFang SC",sans-serif;
+       background:#0f172a;color:#e2e8f0}
+  h1{font-size:20px;margin:0 0 8px}
+  .sub{color:#94a3b8;font-size:14px;margin-bottom:24px}
+  .card{background:#1e293b;border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .ok{color:#4ade80;font-weight:600}
+  .bad{color:#f87171;font-weight:600}
+  code{background:#0b1220;padding:2px 6px;border-radius:4px;font-size:13px}
+  ol{padding-left:20px;margin:8px 0 0}
+  li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<h1>Rules Hub 重写自检</h1>
+<div class="sub">这个页面只有一个用途：告诉你 Quantumult X 的重写链路是否正常。</div>
+
+<div class="card">
+  <div>页面顶部如果出现<span class="ok">绿色横幅</span> → MITM 与脚本执行都正常，重写规则可以生效。</div>
+  <div>没有横幅 → 重写没跑起来，去广告自然也不会生效。</div>
+</div>
+
+<div class="card">
+  <strong>没有横幅时，按顺序检查：</strong>
+  <ol>
+    <li>Quantumult X → 设置 → <code>MITM</code> → 证书是否已安装、并在「设置 → 通用 → 关于本机 → 证书信任设置」里打开完全信任</li>
+    <li>本配置的 <code>[mitm]</code> 里 <code>hostname</code> 是否包含本页域名</li>
+    <li>重写总开关是否打开；<code>[rewrite_remote]</code> 里的条目是否处于启用状态</li>
+    <li>把本配置删掉重新导入一次（QX 有时会缓存旧的重写文件）</li>
+  </ol>
+</div>
+
+<div class="card">
+  <strong>参数</strong><br>
+  生成时间：2026-10-31 10:00<br>
+  配置源：<code>https://dare2live.github.io/rules-hub</code>
+</div>
+</body>
+</html>
