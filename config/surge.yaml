@@ -1,0 +1,85 @@
+# ===== Surge 5 模板的 [General] 段 =====
+#
+# 这里的值全部来自本机实测过的配置，不是随手填的：每一项都对应一个具体的坑，
+# 说明写在各自 note 里。改之前先看 note，别照抄别处的模板。
+#
+# build.py 按数组顺序原样输出（note 会变成上一行的 # 注释）。
+# 新增字段直接往下面加一条即可，不用动代码。
+
+general:
+  - key: loglevel
+    value: 'notify'
+  - key: show-error-page-for-reject
+    value: 'true'
+  - key: allow-wifi-access
+    value: 'false'
+  - key: ipv6
+    value: 'false'
+  - key: test-timeout
+    value: '5'
+  - key: internet-test-url
+    value: 'http://connectivitycheck.platform.hicloud.com/generate_204'
+  - key: proxy-test-url
+    value: 'http://cp.cloudflare.com/generate_204'
+    note: |
+      模板用 connectivitycheck.gstatic.com，国内会被干扰导致测速不准；换成 cp.cloudflare.com。
+  - key: exclude-simple-hostnames
+    value: 'true'
+    note: |
+      单标签主机名（如 localhost）不送进代理。
+  - key: dns-server
+    value: '223.5.5.5, 119.29.29.29'
+    note: |
+      只用国内解析器。模板原来第一项是 system，而 macOS 系统 DNS 指向 1.0.0.1（Cloudflare 明文）。DoH 正常时用不到它，但 DoH 一旦失败 Surge 会回落到明文问境外 —— 那就是真泄露。去掉 system 之后，最坏情况只是慢。
+  - key: encrypted-dns-server
+    value: 'https://dns.alidns.com/dns-query, https://doh.pub/dns-query'
+  - key: encrypted-dns-follow-outbound-mode
+    value: 'false'
+    note: |
+      不让加密 DNS 跟着出站模式走，否则国内域名也会被送去境外解析。
+  - key: hijack-dns
+    value: '8.8.8.8:53, 8.8.4.4:53, 1.1.1.1:53, 1.0.0.1:53, 114.114.114.114:53, 119.29.29.29:53'
+    note: |
+      把常见明文 DNS 全部劫持进 Surge，防止 App 硬编码解析器绕过 fake-IP。
+  - key: read-etc-hosts
+    value: 'true'
+    note: |
+      读 /etc/hosts，本地覆写仍然生效。
+  - key: http-api-web-dashboard
+    value: 'false'
+    note: |
+      不开 web 面板，减少暴露面。
+  - key: skip-proxy
+    value: '127.0.0.0/8, 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, fc00::/7, fe80::/10, localhost, *.local, captive.apple.com'
+    note: |
+      比模板更全：模板只写了 127.0.0.1 单个地址，漏了整个回环段和 IPv6 本地段。
+  - key: always-real-ip
+    value: '*.msftncsi.com, *.msftconnecttest.com, *.srv.nintendo.net, *.stun.playstation.net, xbox.*.microsoft.com, *.xboxlive.com, *.battlenet.com.cn, *.battlenet.com, *.blzstatic.cn, *.battle.net, *.turn.twilio.com, *.stun.twilio.com, stun.syncthing.net, stun.*'
+    note: |
+      STUN / 游戏主机需要真实 IP，fake-IP 会让它们连不上。
+  - key: geoip-maxmind-url
+    value: 'https://github.com/Hackl0us/GeoIP2-CN/raw/release/Country.mmdb'
+    note: |
+      GEOIP,CN 规则靠这个库，不配这条规则直接失效。
+  - key: udp-policy-not-supported-behaviour
+    value: 'reject'
+    note: |
+      UDP 不被策略支持时直接拒绝，避免半通不通的连接挂着。
+  - key: http-listen
+    value: '0.0.0.0'
+    note: |
+      局域网共享代理入口，别的设备可以拿这台 Mac 当网关。
+  - key: socks5-listen
+    value: '0.0.0.0'
+    note: |
+      同上，SOCKS5 入口。
+
+# 脱敏模板里的节点槽位。本机有 config/local.surge.yaml 时不会用到（走 #!include）。
+proxy_slots:
+  - Lightsail Singapore HY2
+  - Lightsail Singapore
+  - Oracle San Jose
+  - Google Oregon
+
+# 远程规则集的自动更新间隔（秒）
+ruleset_update_interval: 86400

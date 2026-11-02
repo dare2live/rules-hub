@@ -33,3 +33,6 @@ backups/
 
 # 工作记忆（本地日志，别进公开仓库）
 .workbuddy/memory/
+
+# 本机专属配置（含节点引入与私有 IP），绝不进公开仓库
+config/local.surge.yaml

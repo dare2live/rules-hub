@@ -47,6 +47,16 @@ def _load_yaml(path):
 CFG_QX = _load_yaml(CONFIG_DIR / "qx.yaml")
 CFG_MITM = _load_yaml(CONFIG_DIR / "mitm.yaml")
 CFG_DATA = _load_yaml(CONFIG_DIR / "data_sources.yaml")
+CFG_SURGE = _load_yaml(CONFIG_DIR / "surge.yaml")
+
+# 本机专属覆盖：节点引入方式、私有直连规则。
+# 这个文件在 .gitignore 里，永远不会进公开仓库 —— 里面会有 VPS IP 和自建域名。
+# 不存在时（例如 CI 上构建）自动走脱敏模板，生成的产物是给外人用的。
+LOCAL_SURGE_PATH = CONFIG_DIR / "local.surge.yaml"
+CFG_SURGE_LOCAL = _load_yaml(LOCAL_SURGE_PATH) if LOCAL_SURGE_PATH.exists() else {}
+# 有本机覆盖时，产物是拿来直接用的本地配置，不能再带 MANAGED-CONFIG
+# （否则 Surge 会按订阅定时从远端拉回脱敏模板，把节点引入和私有规则一起冲掉）。
+IS_LOCAL_SURGE_BUILD = bool(CFG_SURGE_LOCAL)
 
 # Quantumult X 校验配置时必须存在的段落（缺任意一个都会导入失败）
 REQUIRED_QX_SECTIONS = list(CFG_QX["required_sections"])
@@ -429,33 +439,39 @@ def build_surge(config, rule_data):
     
     # 2. Output complete Managed Profile
     profile = []
-    profile.append(f"#!MANAGED-CONFIG {base_url}/surge/profile.conf interval={config['meta'].get('managed_interval', 86400)} strict=false")
-    profile.append(f"# ===== Rules Hub Managed Profile for Surge 5 =====")
-    profile.append(f"# Author: {config['meta']['author']}")
-    profile.append(f"# 提示：此配置为安全脱敏模板，绝不包含任何私密节点密码或IP。")
-    profile.append(f"# 请在客户端本地的 [Proxy] 填入您的真实节点，或在策略组中关联您的本地节点。")
+    if IS_LOCAL_SURGE_BUILD:
+        profile.append("# ===== Rules Hub — Surge 5 本机配置 =====")
+        profile.append("# 由 generator/build.py 生成，直接覆盖 ~/Library/Application Support/Surge/Profiles/")
+        profile.append("# 节点不在这里（#!include Proxy.dconf），私有规则在 config/local.surge.yaml，")
+        profile.append("# 两边都不进仓库，所以重新生成不会冲掉它们。")
+    else:
+        profile.append(f"#!MANAGED-CONFIG {base_url}/surge/profile.conf interval={config['meta'].get('managed_interval', 86400)} strict=false")
+        profile.append(f"# ===== Rules Hub Managed Profile for Surge 5 =====")
+        profile.append(f"# Author: {config['meta']['author']}")
+        profile.append(f"# 提示：此配置为安全脱敏模板，绝不包含任何私密节点密码或IP。")
+        profile.append(f"# 请在客户端本地的 [Proxy] 填入您的真实节点，或在策略组中关联您的本地节点。")
     profile.append("")
     profile.append("[General]")
-    profile.append("loglevel = notify")
-    profile.append("show-error-page-for-reject = true")
-    profile.append("allow-wifi-access = false")
-    profile.append("ipv6 = false")
-    profile.append("test-timeout = 5")
-    profile.append("internet-test-url = http://connectivitycheck.platform.hicloud.com/generate_204")
-    profile.append("proxy-test-url = http://connectivitycheck.gstatic.com/generate_204")
-    profile.append("dns-server = system, 223.5.5.5, 119.29.29.29")
-    profile.append("encrypted-dns-server = https://dns.alidns.com/dns-query, https://doh.pub/dns-query")
-    profile.append("encrypted-dns-follow-outbound-mode = true")
-    profile.append("skip-proxy = 127.0.0.1, 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, localhost, *.local, captive.apple.com")
+    # 强化项全部来自 config/surge.yaml，本机实测过的值，note 会作为注释一起输出
+    for item in CFG_SURGE.get("general", []):
+        note = item.get("note")
+        if note:
+            profile.append("# " + " ".join(note.split()))
+        profile.append(f"{item['key']} = {item['value']}")
     profile.append("")
-    
-    # Proxy Placeholders (safe slots)
+
+    # Proxy：本机用 #!include 引入独立的节点文件，换模板永远不用重加节点
     profile.append("[Proxy]")
-    profile.append("# 节点槽位：本地添加同名节点即可无缝承载")
-    profile.append("Lightsail Singapore HY2 = direct")
-    profile.append("Lightsail Singapore = direct")
-    profile.append("Oracle San Jose = direct")
-    profile.append("Google Oregon = direct")
+    proxy_include = CFG_SURGE_LOCAL.get("proxy_include")
+    if proxy_include:
+        # 注意：#!include 前面不要插入注释行。实测一旦有注释，Surge 会把这一行
+        # 当普通文本吃掉，[Proxy] 拿不到任何节点，紧接着所有策略组报
+        # 「unknown policy name」—— 表现非常像节点丢了，其实是指令没生效。
+        profile.append(proxy_include)
+    else:
+        profile.append("# 节点槽位：本地添加同名节点即可无缝承载")
+        for slot in CFG_SURGE.get("proxy_slots", []):
+            profile.append(f"{slot} = direct")
     profile.append("")
     
     # Proxy Groups
@@ -475,8 +491,15 @@ def build_surge(config, rule_data):
         p_name = p["name"]
         p_type = p["type"]
         if p_type == "select":
-            proxies_str = ", ".join(p["proxies"])
-            profile.append(f"{p_name} = select, {proxies_str}")
+            members = list(p["proxies"])
+            # 每个组末尾都补上 Proxy 与 DIRECT，和 QX 侧一致：
+            # 不补的话想临时把某个组切成直连，客户端里根本没这个选项，
+            # 只能回来改配置重新生成 —— 那正是「每次更新都得手工调整」的来源。
+            # 注意别把自己加进自己（Proxy 组的成员不能是 Proxy）。
+            for builtin in ("Proxy", "DIRECT"):
+                if builtin != p_name and builtin not in members:
+                    members.append(builtin)
+            profile.append(f"{p_name} = select, {', '.join(members)}")
     profile.append("")
     
     # Rules section
@@ -484,11 +507,26 @@ def build_surge(config, rule_data):
     profile.append("# > 进程级优先规则 (Surge Mac 专享防漏双保险)")
     for r in config["rule_sources"]:
         target = r.get("target")
+        # process_platforms 用来声明「这条进程规则只在哪些端有效」。
+        # macOS 上 WorkBuddy 两个客户端的可执行文件都叫 Electron，PROCESS-NAME 永远
+        # 匹配不上，写进 Surge 就是一条死规则；iOS/QX 侧进程名是有效的，仍然保留。
+        plats = r.get("process_platforms")
+        if plats and "surge" not in plats:
+            continue
         for proc in r.get("process", []):
             profile.append(f"PROCESS-NAME,{proc},{target}")
-    
+
+    # 私有直连规则：只有本机构建才有，绝不会出现在公开产物里
+    local_rules = CFG_SURGE_LOCAL.get("local_rules", [])
+    if local_rules:
+        profile.append("")
+        profile.append("# > 局域网与自己的服务器：直连，不绕道")
+        for line in local_rules:
+            profile.append(line)
+
     profile.append("")
     profile.append("# > 模块化分流规则集 (通过本 Hub 远程订阅)")
+    interval = CFG_SURGE.get("ruleset_update_interval", 86400)
     for r in config["rule_sources"]:
         rule_id = r["id"]
         target = r.get("target")
@@ -499,7 +537,7 @@ def build_surge(config, rule_data):
         elif r_type == "FINAL":
             profile.append(f"FINAL,{target},dns-failed")
         elif "file" in r:
-            profile.append(f"RULE-SET,{base_url}/surge/{rule_id}.list,{target}")
+            profile.append(f"RULE-SET,{base_url}/surge/{rule_id}.list,{target},update-interval={interval}")
     
     out_profile = SURGE_DIST / "profile.conf"
     with open(out_profile, "w", encoding="utf-8") as f:

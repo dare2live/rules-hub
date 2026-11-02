@@ -116,7 +116,7 @@ policies:
 fallback_groups:
   - name: "🇸🇬 新加坡自动备用"
     type: "fallback"
-    test_url: "http://connectivitycheck.gstatic.com/generate_204"
+    test_url: "http://cp.cloudflare.com/generate_204"
     interval: 30
     tolerance: 50
     proxies:
@@ -125,7 +125,7 @@ fallback_groups:
 
   - name: "🇺🇸 美国自动优选"
     type: "url-test"
-    test_url: "http://connectivitycheck.gstatic.com/generate_204"
+    test_url: "http://cp.cloudflare.com/generate_204"
     interval: 300
     tolerance: 50
     proxies:
@@ -177,6 +177,10 @@ rule_sources:
     target: "WorkBuddy"
     file: "rules/workbuddy.txt"
     desc: "WorkBuddy / CodeBuddy 境外侧，走新加坡"
+    # macOS 上两个客户端的可执行文件都叫 Electron，PROCESS-NAME 永远匹配不上，
+    # 写进 Surge 就是死规则，所以限定只在 QX 侧输出（iOS 进程名是有效的）。
+    # Mac 上两者靠域名区分：见 workbuddy_cn（.cn 直连）与本条（.ai 走新加坡）。
+    process_platforms: ["qx"]
     process:
       - "WorkBuddy AI"
       - "codebuddy"
