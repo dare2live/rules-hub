@@ -209,6 +209,12 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   另外它对「我的页面」的 cardList 做 dataType 白名单过滤，字段对不上就把整页清空——
   **过时的过滤逻辑和没有兜底一样致命**。修法是换成本地维护版，只拦纯广告请求、
   不改写响应体（见 `rewrites/local/AmapSafe.conf`）。
+- **被调用的脚本必须标 `mirror_only: true`，绝不能进订阅清单**（2026-11 踩到）。
+  像 `amap.clean.js` 这种只给 `.conf` 用 `script-response-body` 调用的脚本本体，
+  一旦作为 `rewrite_remote` 条目挂上去，QX 会按 `opt-parser=true` 把它当**全局解析器
+  跑在所有请求/响应上**：任意站点响应体里出现关键字就会被改写，还拖慢全部流量。
+  加 `mirror_only: true` 后文件照常镜像到 `dist/qx/rewrites/` 供引用，但不写进清单。
+  新增"被引用脚本"类条目时必须检查这一点。
 - **`git add -A` 已经犯过三次**（`.workbuddy/memory/` 一次、`rewrites/cached/` 两次）。
   提交前必须看 `git status --short`，新出现的目录要确认该不该入库；
   缓存类目录一律先加 `.gitignore` 再提交。
