@@ -33,14 +33,35 @@ overrides:
   .*zhijianmedia\.cn:
     - '*.zhijianmedia.cn'
 
-# 技术护栏：拦截「无意义的通配目标」。
+# 银行 / 支付 / 12306 不解密。
 #
-# 不是业务策略，不按「银行 / 政务 / 苹果」分类排除 —— 因为推导出来的主机名是
-# 重写规则里明确写着的那一个（例如 adv.ccb.com 这种开屏广告域名），并不是整个
-# ccb.com。为了「万一」而放弃这些广告拦截并不划算。
+# 这不是「防广告」，是防「MITM 失败的后果」：这几类的证书校验一旦出问题，
+# 后果是 App 打不开、付不了款，比多一个开屏广告严重得多。
+# 其余类别（政务、苹果、微信）不做排除 —— 实测拦掉的都是广告位域名，
+# 为了「万一」放弃拦截不划算。
 #
-# 真正要拦的是 *.com / *.cn 这类公网后缀：写成 hostname 等于让 QX 解密整个互联网，
-# 既没有对应规则，也会把性能拖垮。多级后缀（com.cn 等）由 multi_tld 在推导时处理。
+# 注意粒度：这里写的是后缀，命中推导出的具体主机（如 adv.ccb.com）。
+# 推导不会产生 *.ccb.com 这种整域通配，所以不会把整个银行解密掉。
+deny_suffix:
+  # 银行
+  - bankcomm.com
+  - bankcomm.cn
+  - ccb.com
+  - ecitic.com
+  - pingan.com
+  - spdb.com.cn
+  - icbc.com.cn
+  - abchina.com
+  - boc.cn
+  - cmbchina.com
+  - psbc.com
+  # 支付 / 征信
+  - unionpay.com
+  - 95516.com
+  - alipay.com
+  - tenpay.com
+  # 出行凭证
+  - 12306.cn
 deny_exact:
   - '*.com.cn'
   - '*.net.cn'

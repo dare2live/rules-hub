@@ -72,6 +72,7 @@ MITM_HOST_RE = re.compile(CFG_MITM["host_regex"])
 MITM_MULTI_TLD = tuple(CFG_MITM["multi_tld"])
 # 正则写法无法机械转换时的映射
 MITM_OVERRIDES = dict(CFG_MITM["overrides"])
+MITM_DENY_SUFFIX = tuple(CFG_MITM.get("deny_suffix", []))
 MITM_DENY_EXACT = set(CFG_MITM["deny_exact"])
 
 
@@ -115,12 +116,14 @@ def _host_to_mitm(host):
 def mitm_allowed(host):
     """该主机是否允许 MITM。
 
-    只拦「无意义的通配目标」（*.com / *.cn 之类），不按业务分类排除。
-    推导出的主机名来自重写规则本身，是 adv.ccb.com 这类具体的广告域名，
-    不是整个 ccb.com，所以没有理由为它们开例外。
+    排除「无意义的通配目标」（*.com / *.cn，等于解密整个互联网），
+    以及 config/mitm.yaml 里 deny_suffix 列出的金融 / 12306 类主机。
     """
     h = (host or "").strip().lower()
-    return bool(h) and h not in MITM_DENY_EXACT
+    if not h or h in MITM_DENY_EXACT:
+        return False
+    bare = h[2:] if h.startswith("*.") else h
+    return not any(bare == sfx or bare.endswith("." + sfx) for sfx in MITM_DENY_SUFFIX)
 
 
 def derive_mitm_hostnames(paths):
