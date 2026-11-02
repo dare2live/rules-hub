@@ -1,5 +1,15 @@
-# 腾讯 WorkBuddy AI & CodeBuddy
+# 腾讯 WorkBuddy / CodeBuddy 境外侧：走新加坡
+# 说明：两个客户端（WorkBuddy 国版与 WorkBuddy AI 海外版）的 app.asar
+# 域名集合完全一致（553 条零差异），无法按进程名或域名区分身份。
+# 这里只收「归属境外」的域名，国内域名见 rules/workbuddy-cn.txt（直连，排在本条之前）。
 DOMAIN-SUFFIX,workbuddy.ai
-DOMAIN-SUFFIX,codebuddy.cn
+DOMAIN-SUFFIX,codebuddy.ai
+DOMAIN-SUFFIX,workbuddy.cc
+DOMAIN-SUFFIX,workbuddy.link
+# 腾讯云新加坡桶：海外版资源在这里，直连会被解析到境外 CDN
+DOMAIN-SUFFIX,cos.ap-singapore.myqcloud.com
+# 兜底：未收录的 workbuddy / codebuddy 域名一律走代理。
+# 为什么兜底走代理而不是直连：慢一点能忍，打不开不行。
+# 已知国内域名已由 workbuddy-cn.list 在前面接走，不会被这里误伤。
 DOMAIN-KEYWORD,workbuddy
 DOMAIN-KEYWORD,codebuddy

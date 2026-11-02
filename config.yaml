@@ -56,9 +56,17 @@ policies:
       - "Google Oregon"
       - "🇸🇬 新加坡自动备用"
 
+  - name: "WorkBuddyCN"
+    type: "select"
+    desc: "WorkBuddy 国内服务（workbuddy.cn / codebuddy.cn / copilot.tencent.com），默认直连"
+    default_select: "DIRECT"
+    proxies:
+      - "DIRECT"
+      - "🇸🇬 新加坡自动备用"
+
   - name: "WorkBuddy"
     type: "select"
-    desc: "腾讯 WorkBuddy AI 加速通道"
+    desc: "腾讯 WorkBuddy AI 加速通道（境外侧，走新加坡）"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "🇸🇬 新加坡自动备用"
@@ -142,10 +150,19 @@ rule_sources:
     upstream_urls:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Gemini/Gemini.list"
 
+  # 两个客户端（国版 WorkBuddy / 海外版 WorkBuddy AI）共用同一套后端，
+  # app.asar 里的域名集合 553 条零差异，进程名都是 Electron —— 分不出身份。
+  # 所以按「域名归属」拆：国内域名走 WorkBuddyCN（直连），境外域名走 WorkBuddy（新加坡）。
+  # 这一条必须排在 workbuddy 之前，否则国内域名会被后面的 KEYWORD 兜底送进代理。
+  - id: "workbuddy_cn"
+    target: "WorkBuddyCN"
+    file: "rules/workbuddy-cn.txt"
+    desc: "WorkBuddy / CodeBuddy 国内服务（腾讯云北京、广州），直连"
+
   - id: "workbuddy"
     target: "WorkBuddy"
     file: "rules/workbuddy.txt"
-    desc: "腾讯 WorkBuddy AI"
+    desc: "WorkBuddy / CodeBuddy 境外侧，走新加坡"
     process:
       - "WorkBuddy AI"
       - "codebuddy"

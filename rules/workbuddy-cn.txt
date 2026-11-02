@@ -1,0 +1,20 @@
+# WorkBuddy 国内服务（腾讯侧）：直连
+# 两个客户端（WorkBuddy 国版 / WorkBuddy AI 海外版）共用同一套后端，
+# 域名集合完全一致，所以这里按「域名归属」而不是「哪个 App」来拆。
+# 国内域名绕新加坡会明显变慢（腾讯云北京 / 广州），必须直连。
+DOMAIN-SUFFIX,workbuddy.cn
+DOMAIN-SUFFIX,codebuddy.cn
+DOMAIN-SUFFIX,codebuddy.work
+DOMAIN-SUFFIX,codebuddy.woa.com
+DOMAIN-SUFFIX,copilot.tencent.com
+DOMAIN-SUFFIX,staging-codebuddy.tencent.com
+DOMAIN-SUFFIX,genie.tencent.com
+# 腾讯云 COS：北京 / 广州桶走国内，不绕境外
+DOMAIN-SUFFIX,cos.ap-beijing.myqcloud.com
+DOMAIN-SUFFIX,cos.ap-guangzhou.myqcloud.com
+DOMAIN-SUFFIX,cos.accelerate.myqcloud.com
+# 腾讯登录与 SSO：绕境外会被风控判异地
+DOMAIN-SUFFIX,account.tencent.com
+DOMAIN-SUFFIX,account.tencentid.com
+DOMAIN-SUFFIX,identity.tencent.com
+DOMAIN-SUFFIX,identity.tencentid.com

@@ -373,6 +373,7 @@ def get_qx_tag(rule_id):
         "custom_direct": "个人直连",
         "claude": "Claude",
         "google_ai": "GoogleAI",
+        "workbuddy_cn": "WorkBuddyCN",
         "workbuddy": "WorkBuddy",
         "media": "国际媒体",
         "openai": "OpenAI",
@@ -530,6 +531,7 @@ QX_ICONS = {
     "Claude": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png",
     "GoogleAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png",
     "WorkBuddy": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
+    "WorkBuddyCN": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
     "OpenAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png",
     "全球加速": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png",
     "国际媒体": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png",
@@ -541,7 +543,7 @@ QX_ICONS = {
 def build_qx_policy_block(config, node_tags):
     """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。"""
     policies = {p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"}
-    order = ["Proxy", "Media", "Claude", "GoogleAI", "OpenAI", "WorkBuddy"]
+    order = ["Proxy", "Media", "Claude", "GoogleAI", "OpenAI", "WorkBuddyCN", "WorkBuddy"]
     names = {k: QX_NAME_MAP.get(k, k) for k in policies}
     node_set = set(node_tags)
     lines = []
