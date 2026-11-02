@@ -25,7 +25,7 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 |---|---|
 | `config.yaml` | 策略组、规则源、重写清单（主配置） |
 | `config/qx.yaml` | QX 名称映射、图标、策略组顺序、必需段落、国内 DNS |
-| `config/mitm.yaml` | MITM 推导规则与禁解密黑名单 |
+| `config/mitm.yaml` | MITM 推导规则与通配后缀护栏（无业务分类黑名单） |
 | `config/data_sources.yaml` | chnroute / gfwlist / cdn 上游与缓存天数 |
 | `web/index.html` | 看板模板（`{{base_url}}` 等 6 个占位符） |
 | `web/selftest.html` + `templates/selftest.js` | QX 自检页 |
