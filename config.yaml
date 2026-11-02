@@ -295,9 +295,11 @@ rewrites:
   - id: "amap_clean_script"
     name: "高德内容净化脚本[本地维护]"
     filename: "amap.clean.js"
-    # 这条只是把脚本本身自托管出去，供下面的 AmapClean.conf 引用。
-    # 按标题文本做黑名单删除（猜你喜欢 / 达人任务 / 好友动态），
-    # 匹配不上就原样放行 —— 和上游「白名单保留、字段一变就清空整页」相反。
+    # mirror_only：只把这个文件自托管出去，供下面的 AmapClean.conf 通过
+    # script-response-body 引用。它本身不是订阅条目 —— 一旦进 [rewrite_remote]，
+    # QX 会按 opt-parser=true 把它当全局脚本跑在所有请求上，命中关键字就去改
+    # 任意站点的响应体，还会拖慢全部流量。
+    mirror_only: true
     local_file: "rewrites/local/amap.clean.js"
     opt_parser: true
     enabled: true

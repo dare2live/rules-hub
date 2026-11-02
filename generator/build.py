@@ -851,6 +851,8 @@ def build_qx(config, rule_data, produced=None):
         fn = rw["filename"]
         if produced is not None and fn not in produced:
             continue
+        if rw.get("mirror_only", False):
+            continue  # 只镜像到 dist 供别的重写引用，本身不是订阅条目
         name = rw["name"]
         opt_str = str(rw.get("opt_parser", False)).lower()
         enb_str = str(rw.get("enabled", True)).lower()
@@ -1137,7 +1139,11 @@ def build_rewrites(config):
                     
         opt_str = str(opt_parser).lower()
         enb_str = str(enabled).lower()
-        rewrite_remote_snippets.append(f"{self_hosted_url}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
+        # mirror_only：文件照常镜像到 dist（别的重写会通过 URL 引用它），
+        # 但不写进订阅清单 —— 否则 QX 会把它当独立订阅加载，
+        # 配了 opt-parser 的纯 JS 会变成跑在所有流量上的全局脚本。
+        if not rw.get("mirror_only", False):
+            rewrite_remote_snippets.append(f"{self_hosted_url}, tag={name}, update-interval=86400, opt-parser={opt_str}, enabled={enb_str}")
         
     # Write rewrite_remote.snippet
     with open(QX_DIST / "rewrite_remote.snippet", "w", encoding="utf-8") as f:
@@ -1159,7 +1165,8 @@ def build_rewrites(config):
     # 所有 HTTPS 重写都会静默失效（导入不报错，只是没效果）。
     enabled_paths = [
         rw_dist / rw["filename"] for rw in rewrites
-        if rw.get("enabled", True) and (rw_dist / rw["filename"]).exists()
+        if rw.get("enabled", True) and not rw.get("mirror_only", False) \
+                and (rw_dist / rw["filename"]).exists()
     ]
     derived = derive_mitm_hostnames(enabled_paths)
     declared = {h.strip() for h in all_hostnames
@@ -1388,6 +1395,8 @@ def generate_personal_qx_config(config, produced=None):
         fn = rw["filename"]
         if produced is not None and fn not in produced:
             continue
+        if rw.get("mirror_only", False):
+            continue  # 只镜像到 dist 供别的重写引用，本身不是订阅条目
         name = rw["name"]
         opt_str = str(rw.get("opt_parser", False)).lower()
         enb_str = str(rw.get("enabled", True)).lower()
