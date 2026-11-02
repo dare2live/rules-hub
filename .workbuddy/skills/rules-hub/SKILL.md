@@ -12,7 +12,9 @@ description: Rules Hub 多端代理规则编译与分发项目的操作规范与
 
 ```bash
 /usr/bin/python3 generator/build.py   # 编译（macOS 自带 python3 可能没 PyYAML，用 /usr/bin/python3）
-./scripts/sync.sh                     # 重新生成 + 推私有侧（改了节点/策略组结构时用）
+bash scripts/update_surge.sh          # Mac 的 Surge：生成→备份→部署→重载→拉规则集→节点自检（失败自动回滚）
+bash scripts/update_qx.sh             # iOS 的 QX：生成→推 KV→判断要不要手动导入→链接进剪贴板
+./scripts/sync.sh                     # 只重新生成 + 推私有侧（上面两个脚本的底层）
 python3 scripts/publish_private.py --show    # 忘了口令
 python3 scripts/publish_private.py --rotate  # 口令泄露
 ```
@@ -27,6 +29,8 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 | `config/qx.yaml` | QX 名称映射、图标、策略组顺序、必需段落、国内 DNS |
 | `config/mitm.yaml` | MITM 推导规则与通配后缀护栏（无业务分类黑名单） |
 | `config/data_sources.yaml` | chnroute / gfwlist / cdn 上游与缓存天数 |
+| `config/surge.yaml` | Surge `[General]` 全部字段，每项带 note；还有节点槽位与规则集更新间隔 |
+| `config/local.surge.yaml` | 本机专属（gitignore）：`#!include Proxy.dconf` + 私有直连规则 |
 | `web/index.html` | 看板模板（`{{base_url}}` 等 6 个占位符） |
 | `web/selftest.html` + `templates/selftest.js` | QX 自检页 |
 | `templates/router/*.sh` | 路由器同步与安装脚本（`__BASE__` `__CRON__` `__CDN_APPLY__` 占位符） |
@@ -63,6 +67,15 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 6. **QX 能解 br 和 zstd**，别把空响应当成压缩问题。
 7. 出问题先看 `https://dare2live.github.io/rules-hub/qx/selftest.html`，顶部绿色横幅 = MITM 通。
    没横幅先查证书信任，别去改规则。
+8. **只有 `*_remote` 三个段会自动更新**：`[server_remote]` 节点、`[filter_remote]` 分流、
+   `[rewrite_remote]` 重写。`[general] [dns] [policy] [mitm] [filter_local] [rewrite_local] [task_local]`
+   是配置本体，QX **没有整份配置的自动刷新**，改了必须手动导入一次。
+   改 `rules/*.txt` 通常不用动手机；但 `direct.txt` 会同时写进 `[filter_local]`（内联白名单）
+   和 `[filter_remote]`，所以改直连规则**仍需手动导入**。
+9. **重写文件里内联引用的脚本也必须自托管**。`mirror_inline_scripts()` 会把
+   `script-response-body` 后面的外部 URL 下载镜像到 `dist/qx/rewrites/scripts/`。
+   只把 `.conf` 本身自托管是不够的 —— 文件从国内拿得到、它要用的脚本却要回 GitHub 拿，
+   就会表现为「某个页面转圈 / 提示网络不畅」。改完要统计残留的外部 URL（注释里的不算）。
 
 ### 华硕梅林 / fancyss
 
@@ -78,14 +91,23 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 
 ### Surge（Mac）
 
-1. **`[Proxy]` 段不能有注释**。写了就变 mixed content，需要 6.9.0+；5.x 会解析失败并
-   **静默回退到 `Default.conf`**，表现是"节点剩俩、配置文件没了"，实际一个都没丢。
-2. 改配置**先用副本 `switch-profile` 验证**，别直接动在跑的那份。
-3. 节点放 `Proxy.dconf`，主配置只写 `#!include Proxy.dconf`，换模板不丢节点。
-4. 排查：`surge-cli dump policy / rule / profile original`、`dump request --raw`
-   （看 `originalPolicyName` 和 `remoteAddress`）。cli 在 `/Applications/Surge.app/Contents/Applications/surge-cli`。
-5. 测出口要 `curl --noproxy '*'`，否则测到的是 WorkBuddy 自己注入的代理。
-6. 两个 Electron 客户端可执行文件都叫 `Electron`，`PROCESS-NAME` 分不开，要用 `PROCESS-PATH`。
+1. **`[Proxy]` 段里 `#!include Proxy.dconf` 前后不能有任何字符，包括注释**。
+   在它上面加一行说明，Surge 会把整条指令当普通文本吃掉，`[Proxy]` 一个节点都拿不到，
+   表现为「加载成功」但所有策略组报 `unknown policy name`。
+   看起来像节点丢了，其实是指令没生效。
+2. **`surge-cli reload` 返回 success 不代表加载成功**。加载失败时 HTTP 代理端口会直接消失
+   （`curl -x http://127.0.0.1:6152` 立刻 connection refused），这是最快的信号。
+   所以更新脚本末尾必须有节点自检（`dump policy | grep 节点名`），失败回滚。
+3. **`reload` 之后立刻 `external-resource update all` 会全部 `-1004`**，是代理栈未就绪的竞态，
+   睡 3 秒再跑就全 success。不是网络问题，别去查网络。
+4. 节点放 `Proxy.dconf`，主配置只写 `#!include Proxy.dconf`，换模板不丢节点。
+   本机配置**完全由生成产物覆盖**，不再手工改；要加私有规则改 `config/local.surge.yaml`。
+5. 排查：`surge-cli dump policy / rule / profile effective`、`dump request --raw`
+   （看 `policyName` 和 `rule`）。cli 在 `/Applications/Surge.app/Contents/Applications/surge-cli`。
+6. 测出口要 `curl --noproxy '*'`，否则测到的是 WorkBuddy 自己注入的代理。
+7. **Surge 只支持 `PROCESS-NAME`，不支持 `PROCESS-PATH`**（二进制里搜得到 `PROCESS-NAME` 而已）。
+   两个 WorkBuddy 客户端可执行文件都叫 `Electron`，进程层分不开 —— 只能按**域名**拆。
+   `config.yaml` 里给规则源加 `process_platforms: ["qx"]` 可以只让 QX 侧输出进程规则。
 
 ### 验证方法
 

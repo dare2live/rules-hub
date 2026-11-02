@@ -20,26 +20,43 @@
 ```text
 rules-hub/
 ├── config.yaml                  # 全局配置：策略组映射、规则源、路由同步参数
+├── config/                      # 常量与模板参数（外置，改这些不用动 Python）
+│   ├── qx.yaml                  #   QX 策略组名称映射、图标、组顺序、默认选中项
+│   ├── surge.yaml               #   Surge [General] 全部字段（每项带 note 说明来由）
+│   ├── mitm.yaml                #   MITM 推导规则与公网后缀护栏
+│   ├── data_sources.yaml        #   上游数据源地址与缓存时长
+│   └── local.surge.yaml         #   本机专属：节点引入 + 私有直连（gitignore，不入库）
 ├── rules/                       # 原子规则源（纯域名 / IP，无策略标记）
 │   ├── unbreak.txt              # 防误杀白名单（最高优先级，对广告规则一票豁免）
-│   ├── direct.txt               # 个人直连：微信、企微、国内银行、比亚迪、自建服务
+│   ├── direct.txt               # 个人直连：微信、企微、国内银行、比亚迪、高德、自建服务
 │   ├── claude.txt               # Claude / Anthropic 全生态
 │   ├── google-ai.txt            # Gemini / Antigravity / Cloud Code
-│   ├── workbuddy.txt            # 腾讯 WorkBuddy / CodeBuddy
+│   ├── workbuddy-cn.txt         # WorkBuddy 国版（.cn / 腾讯域）→ 直连
+│   ├── workbuddy.txt            # WorkBuddy 海外版（.ai / .cc / 新加坡 COS）
 │   ├── media.txt                # YouTube / Netflix / Spotify
 │   ├── openai.txt               # OpenAI / ChatGPT / Sora
 │   ├── tiktok.txt               # TikTok 全生态
 │   ├── proxy.txt                # 通用海外站点
 │   └── reject.txt               # 广告与追踪
 ├── rewrites/                    # Quantumult X 重写脚本（去开屏、去广告等）
+├── web/                         # HTML 模板（占位符渲染，改样式改这里）
+│   ├── index.html               #   静态仪表盘
+│   └── selftest.html            #   重写链路自检页
+├── templates/                   # 非 HTML 模板
+│   ├── selftest.js              #   自检脚本
+│   └── router/{install.sh,ss_rule_sync.sh}  # 路由器脚本
 ├── generator/build.py           # 编译引擎（Python 3 + PyYAML）
 ├── worker/                      # Cloudflare Worker：私有订阅分发（读 KV）
+├── scripts/update_surge.sh      # 一条命令：更新 Mac 上的 Surge（含节点自检与回滚）
+├── scripts/update_qx.sh         # 一条命令：更新 iOS 的 QX（含「要不要手动导入」判定）
 ├── scripts/publish_private.py   # 个人配置 + 节点订阅 → Cloudflare KV
-├── scripts/sync.sh              # 一条命令：重新生成 + 推送私有侧
-├── web/                         # 静态仪表盘模板
+├── scripts/sync.sh              # 重新生成 + 推送私有侧（update_qx.sh 的底层）
 ├── .github/workflows/deploy.yml # CI：构建 → GitHub Pages + gh-pages 镜像
 └── dist/                        # 编译产物（不入库）
 ```
+
+> **没有硬编码**：看板 HTML、自检页、路由器脚本、QX 图标与组顺序、Surge General 字段
+> 全部在 `config/` `web/` `templates/` 里。改样式改文案改默认值，不需要碰 `build.py`。
 
 ---
 
@@ -75,15 +92,53 @@ rules-hub/
 | 组 | 用途 |
 |---|---|
 | `DIRECT` | 直连 |
-| `Claude` | Claude / Anthropic，锁定可用地区 |
+| `Claude` | Claude / Anthropic，默认锁定新加坡 |
 | `GoogleAI` | Gemini / Antigravity / Cloud Code |
-| `OpenAI` | ChatGPT / Codex，锁定美区出口 |
-| `WorkBuddy` | 腾讯 AI 服务加速 |
+| `OpenAI` | ChatGPT / Codex |
+| `WorkBuddyCN` | WorkBuddy 国版（`.cn` / 腾讯域），**默认直连** |
+| `WorkBuddy` | WorkBuddy 海外版，走新加坡 |
 | `Proxy`（QX 中为「全球加速」） | 通用海外流量 |
 | `Media`（QX 中为「国际媒体」） | 流媒体 |
 | `REJECT` | 广告拦截 |
 
 QX 的策略组由 `config.yaml` 派生，并按 `server_local` 中**真实存在的节点标签**过滤，不会引用不存在的节点导致导入失败。
+
+每个组末尾都补了内置 `proxy` 与 `direct`，**默认选中项**由 `config.yaml` 的 `qx_default` 指定
+（Claude → `Lightsail Singapore`，WorkBuddyCN → `DIRECT`，其余 → `proxy`）。
+不补这两项的话，更新配置后想临时把某个组切成直连，客户端里根本没有这个选项，
+只能回来改配置重新生成 —— 这就是「每次更新都得手工调整」的来源。
+
+> **Mac 上区分不了两个 WorkBuddy 客户端**：两个 app 的可执行文件都叫 `Electron`，
+> 域名集合完全一致，Surge 只支持 `PROCESS-NAME` 不支持 `PROCESS-PATH`，所以进程层无法区分。
+> 现在的做法是按**域名**拆 `workbuddy-cn.txt` / `workbuddy.txt`，两者域名完全不相交，够用。
+> iOS 上是一个客户端、同一套后端，登录身份在 TLS 里，代理层看不到 —— 无法区分。
+
+---
+
+## 🖥 Mac 上的 Surge（模板即成品）
+
+本机配置**完全由生成产物覆盖**，不再有任何手工改动。三份文件各司其职：
+
+| 文件 | 入库 | 内容 |
+|---|---|---|
+| `config/surge.yaml` | ✅ | `[General]` 全部字段，每项带 `note` 写明为什么这么配，生成时作为注释一起输出 |
+| `config/local.surge.yaml` | ❌ gitignore | `#!include Proxy.dconf` + 私有直连（VPS IP、自有域名、LAN） |
+| `Proxy.dconf` | ❌ 不在仓库 | 真实节点 |
+
+`build.py` 只在本地存在 `local.surge.yaml` 时才读它；CI 上没有，产物自动回退成
+脱敏模板（占位节点 + 零私有信息）。有 local 配置时不输出 `#!MANAGED-CONFIG`，
+否则 Surge 会按订阅定时把脱敏模板拉回来，把节点引入和私有规则一起冲掉。
+
+```bash
+bash scripts/update_surge.sh
+```
+
+> ⚠️ **`[Proxy]` 段里 `#!include` 前面不能有任何字符，包括注释。**
+> 曾经在它上面加了一行说明，Surge 把整条指令当普通文本吃掉，`[Proxy]` 一个节点都没拿到，
+> 结果是「加载成功」但所有策略组报 `unknown policy name`。
+> 另外 `surge-cli reload` 返回 `success` **不代表**加载成功 —— 加载失败时 HTTP 端口会
+> 直接消失（`curl 127.0.0.1:6152` 立刻 connection refused），这是最快的信号，
+> 所以更新脚本末尾带节点自检，失败自动回滚。
 
 ---
 
@@ -178,16 +233,38 @@ Clash_Personal.yaml            ← 本地生成，含真实节点，已 gitignor
 # 规则改了：推上去，CI 自动构建，设备端每天自己拉，什么都不用做
 git add -A && git commit -m "..." && git push
 
-# 节点 / 策略组结构改了：重新生成 + 推送私有侧
-./scripts/sync.sh          # = build.py + publish_private.py
+# Mac 上的 Surge：一条命令（生成 → 备份 → 部署 → 重载 → 拉规则集 → 自检节点）
+bash scripts/update_surge.sh
 
-# 之后在手机上点一次「更新配置文件」即可
+# iOS 上的 QX：一条命令（生成 → 推 KV → 判断要不要手动导入 → 复制链接）
+bash scripts/update_qx.sh
+
 python3 scripts/publish_private.py --show     # 忘了口令就用这个
 python3 scripts/publish_private.py --rotate   # 口令泄露了就换一个
 ```
 
 > **这就是「机场模式」**：设备只认一个订阅地址，之后所有变更都在服务端完成，
 > 客户端点一下更新就同步了，不需要再传文件。
+
+### iOS 到底什么时候才需要手动导入
+
+QX **没有**「整份配置自动刷新」这回事。它的远程订阅只覆盖三个段，其余是配置本体：
+
+| 段 | 更新方式 |
+|---|---|
+| `[server_remote]` 节点 | ✅ 自动，`update-interval=172800` |
+| `[filter_remote]` 分流规则 | ✅ 自动，`update-interval=86400` |
+| `[rewrite_remote]` 重写脚本 | ✅ 自动，`update-interval=86400` |
+| `[general]` `[dns]` `[policy]` `[mitm]` `[filter_local]` `[rewrite_local]` `[task_local]` | ❌ **必须手动导入** |
+
+所以**改 `rules/*.txt` 大多数情况不用动手机** —— 分流规则走 `[filter_remote]`，手机自己拉。
+只有策略组结构、MITM 名单、General 变了才需要重新导入，而 `update_qx.sh` 会自动比对
+上次发布的快照，**只在真的变了才提示你动手**，并把导入链接复制到剪贴板
+（开了接力的话 iPhone 可直接粘贴）。
+
+> ⚠️ 一个已知的不一致：`rules/direct.txt` 会同时写进 `[filter_local]`（内联白名单，
+> 优先级高于远程订阅与 `geoip`）和 `[filter_remote]`（`custom_direct.list`）。
+> 所以改直连规则**仍然需要手动导入一次** —— 内联那份 QX 不会自动更新。
 
 ### 为什么不再拆一个「纯节点订阅」给 QX
 
