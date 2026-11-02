@@ -228,6 +228,20 @@ def fetch_raw(url, timeout=12, ua=None):
         return None
 
 
+def fetch_bytes(url, timeout=12):
+    """Fetch raw bytes（图标等二进制资源用，走 fetch_raw 会被 utf-8 解码写坏）。"""
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+    except Exception as e:
+        print(f"   ⚠️  [Warning] Binary fetch failed for {url}: {e}")
+        return None
+
+
 def is_html_payload(text):
     """Detect HTML landing/error pages (e.g. Cloudflare 302 -> homepage) masquerading as rule files."""
     if not text:
@@ -875,9 +889,14 @@ SCRIPT_REF_RE = re.compile(
 SCRIPT_CACHE_DIR = REWRITES_CACHE_DIR / "scripts"
 
 
+_KNOWN_ASSET_EXT = (".js", ".json", ".conf", ".png", ".jpg", ".jpeg", ".svg", ".webp")
+
+
 def _script_mirror_name(url):
     base = url.split("?")[0].rstrip("/").split("/")[-1]
-    if not base.endswith(".js"):
+    # 保留原始扩展名：图标镜像后如果变成 xxx.png.js，GitHub Pages 会按
+    # text/javascript 返回，QX 拿到错误的 MIME 就显示不出来。
+    if not base.lower().endswith(_KNOWN_ASSET_EXT):
         base += ".js"
     return hashlib.md5(url.encode("utf-8")).hexdigest()[:8] + "-" + base
 
@@ -921,6 +940,85 @@ def mirror_inline_scripts(content, base_url, rw_id):
         out = out.replace(url, seen[url])
     if failed:
         print(f"   ⚠️  [Rewrites] {rw_id}: {failed} 个脚本镜像失败，保留原地址")
+    return out, len(seen)
+
+
+def self_host_urls_in_block(block, base_url, tag):
+    """把任意配置段里引用的外部脚本镜像到自托管，返回 (新内容, 镜像数量)。
+
+    和 mirror_inline_scripts 的区别：那个只处理重写文件里的 script-* 引用，
+    这个处理 `[general]` 的 resource_parser_url、`[task_local]` 的
+    event-interaction 等「配置本体的外部依赖」。
+
+    为什么也要管：这些段每次导入都会加载，指向 GitHub raw 时国内经常拉不到，
+    表现为「QX 里添加新资源失败」「流媒体解锁查询没反应」——
+    跟重写脚本拉不到是同一类问题，只是藏得更深。
+    """
+    if not block:
+        return block, 0
+    SCRIPT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    out = block
+    seen = {}
+    failed = 0
+    for m in re.finditer(r"https?://[^\s,;'\"()]+", block):
+        url = m.group(0)
+        if "github" not in url or url.startswith(base_url):
+            continue
+        # 只镜像文本类。图标等二进制走 fetch_raw + write_text 会被 utf-8 解码写坏，
+        # 需要二进制通道，暂时不动 —— 拉不到只是没图标，不影响功能。
+        # 文本类走缓存+HTML 校验，二进制（图标）单独走字节通道 ——
+        # 图标用 write_text 会被 utf-8 解码写坏，必须 write_bytes。
+        is_bin = url.split("?")[0].endswith((".png", ".jpg", ".jpeg", ".svg", ".webp"))
+        if not is_bin and not url.split("?")[0].endswith((".js", ".json", ".conf")):
+            continue
+        if url in seen:
+            out = out.replace(url, seen[url])
+            continue
+        name = _script_mirror_name(url)
+        cache = SCRIPT_CACHE_DIR / name
+        if is_bin:
+            data = b""
+            if cache.exists() and time.time() - os.path.getmtime(cache) < 30 * 86400:
+                data = cache.read_bytes()
+            else:
+                got = fetch_bytes(url, timeout=10)
+                if got and not got.lstrip()[:16].lower().startswith((b"<html", b"<!doc")):
+                    data = got
+                    cache.parent.mkdir(parents=True, exist_ok=True)
+                    cache.write_bytes(data)
+                elif cache.exists():
+                    data = cache.read_bytes()
+            if not data:
+                failed += 1
+                continue
+            dest_dir = QX_DIST / "scripts"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            (dest_dir / name).write_bytes(data)
+            seen[url] = f"{base_url}/qx/scripts/{name}"
+            out = out.replace(url, seen[url])
+            continue
+        text = ""
+        if cache.exists() and time.time() - os.path.getmtime(cache) < 7 * 86400:
+            text = read_text(cache)
+        else:
+            got = fetch_raw(url, timeout=10)
+            if got and not is_html_payload(got):
+                text = got
+                write_text(cache, text)
+            elif cache.exists():
+                text = read_text(cache)
+        if not text:
+            failed += 1
+            continue
+        dest_dir = QX_DIST / "scripts"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        write_text(dest_dir / name, text)
+        seen[url] = f"{base_url}/qx/scripts/{name}"
+        out = out.replace(url, seen[url])
+    if failed:
+        print(f"   ⚠️  [QX] {tag}: {failed} 个外部依赖镜像失败，保留原地址")
+    elif seen:
+        print(f"   🔗 [QX] {tag}: {len(seen)} 个外部依赖已自托管")
     return out, len(seen)
 
 
@@ -1189,7 +1287,7 @@ def generate_personal_qx_config(config, produced=None):
         else:
             mitm_block = mitm_block.rstrip("\n") + "\n\n" + _new_hn
 
-    # 只保留真实存在的节点标签，策略组据此生成，避免引用不存在的节点
+    # 只保留真实存在的节点标签（含 [general]/[task_local] 外部依赖自托管），策略组据此生成，避免引用不存在的节点
     node_tags = []
     for line in server_local_block.splitlines():
         s = line.strip()
@@ -1301,7 +1399,13 @@ def generate_personal_qx_config(config, produced=None):
     p.append(mitm_block)
     p.append("")
 
-    text = "\n".join(p) + "\n"
+    # 最后对整份配置再过一遍外部依赖镜像。
+    # 放在最末尾是刻意的：策略组图标（img-url）、任何新加进来的外链都在这里被兜住，
+    # 不用在每处生成逻辑里各自记得调一次 —— 那正是之前漏掉重写内联脚本的原因。
+    text, n_hosted = self_host_urls_in_block("\n".join(p) + "\n", base_url, "整份配置")
+    if n_hosted:
+        print(f"   🔗 [QX] 共 {n_hosted} 个外部依赖改为自托管")
+
     personal_conf_path = BASE_DIR / "QuantumultX_Personal.conf"
     with open(personal_conf_path, "w", encoding="utf-8") as out:
         out.write(text)
@@ -1689,6 +1793,9 @@ def build_clash(config, rule_data):
     L.append("rules:")
     L.append("  # ===== 1. 进程级（macOS 专享，域名规则漏了也能兜住）=====")
     for r in config["rule_sources"]:
+        plats = r.get("process_platforms")
+        if plats and "clash" not in plats:
+            continue
         for proc in r.get("process", []):
             L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
 
@@ -1964,7 +2071,13 @@ def generate_personal_clash_config(config, rule_data):
     L.append("")
 
     L.append("rules:")
+    # 与 Surge 侧一致：process_platforms 声明「这条进程规则只在哪些端有效」。
+    # macOS 上 WorkBuddy 两个客户端的可执行文件都叫 Electron，Clash 的 PROCESS-NAME
+    # 同样匹配不到，写出来只是死规则 —— 这类必须按端过滤。
     for r in config["rule_sources"]:
+        plats = r.get("process_platforms")
+        if plats and "clash" not in plats:
+            continue
         for proc in r.get("process", []):
             L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
     for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",

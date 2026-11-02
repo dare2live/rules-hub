@@ -10,11 +10,17 @@ name_map:
   Media: 国际媒体
 
 # 策略组图标（img-url）。没有图标的组不加 img-url 参数，不影响功能。
+#
+# 注意：这些地址会在构建时被镜像到自托管（dist/qx/scripts/），所以填上游地址即可，
+# 设备端拿到的是我们自己的链接，上游删了也不影响。
+# 但上游地址本身必须是 200 —— 404 的图标镜像不了，会保留死链，
+# 表现为「策略组没图标，且每次加载配置都要去请求一个不存在的图」。
+# Claude.png / Tencent.png 上游已删（2026-11 实测 404），换成同仓库仍在的 AI / Bot / WeChat。
 icons:
-  Claude: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png
+  Claude: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Bot.png
   GoogleAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png
-  WorkBuddy: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png
-  WorkBuddyCN: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png
+  WorkBuddy: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/WeChat.png
+  WorkBuddyCN: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/WeChat.png
   OpenAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png
   全球加速: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
   国际媒体: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png
