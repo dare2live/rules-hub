@@ -1070,7 +1070,11 @@ def build_rewrites(config):
                 print(f"   ⚠️  [Rewrites] {rw_id}: 本地文件不存在 {local_rel}，跳过")
                 continue
             content = read_text(local_path)
-            if not valid_rewrite_payload(content):
+            # 本地文件是我们自己写的，不存在「上游返回 HTML 错误页」这个风险，
+            # 所以只挡空文件和明显的 HTML，不要求 rewrite 指令标记。
+            # 否则纯 JS 脚本会被误杀：像 amap.clean.js 这种被调用的脚本本体，
+            # 本来就不含 hostname / url / script- 这些标记（标记在引用它的 .conf 里）。
+            if not content or len(content.strip()) < 30 or is_html_payload(content):
                 print(f"   ⚠️  [Rewrites] {rw_id}: 本地文件内容无效，跳过")
                 continue
             need_fetch = False
