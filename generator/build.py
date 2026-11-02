@@ -998,9 +998,12 @@ def build_qx_assets(config):
         ok += 1
     # 就地换成自托管地址：这样后面所有读 icons 的地方（公开模板、个人配置）
     # 拿到的都是我们自己的链接，不用在每个使用点再替换一次。
+    # 注意 QX_ICONS 是模块 import 时的快照（562 行 dict(CFG_QX["icons"])），
+    # 只改 CFG_QX 不会带上它 —— 之前 policy 段图标一直是上游地址就是因为漏了它。
     for _k, _v in (CFG_QX.get("icons") or {}).items():
         if _v in QX_ASSET_URLS:
             CFG_QX["icons"][_k] = QX_ASSET_URLS[_v]
+            QX_ICONS[_k] = QX_ASSET_URLS[_v]
     print(f"   \U0001f517 [Assets] {ok} \u4e2a\u8d44\u6e90\u5df2\u81ea\u6258\u7ba1\u5230 dist/qx/scripts/\uff08\u5931\u8d25 {failed}\uff09")
     if failed:
         print("      \u2191 \u5931\u8d25\u7684\u4f1a\u4fdd\u7559\u539f\u5730\u5740\uff0c\u4e0d\u4f1a\u5199\u6210\u574f\u94fe\u63a5\uff1b\u8bf7\u6362\u4e00\u4e2a\u4ecd\u5728\u7ef4\u62a4\u7684\u4e0a\u6e38\u5730\u5740")

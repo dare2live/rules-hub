@@ -209,12 +209,24 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   另外它对「我的页面」的 cardList 做 dataType 白名单过滤，字段对不上就把整页清空——
   **过时的过滤逻辑和没有兜底一样致命**。修法是换成本地维护版，只拦纯广告请求、
   不改写响应体（见 `rewrites/local/AmapSafe.conf`）。
-- **被调用的脚本必须标 `mirror_only: true`，绝不能进订阅清单**（2026-11 踩到）。
-  像 `amap.clean.js` 这种只给 `.conf` 用 `script-response-body` 调用的脚本本体，
-  一旦作为 `rewrite_remote` 条目挂上去，QX 会按 `opt-parser=true` 把它当**全局解析器
-  跑在所有请求/响应上**：任意站点响应体里出现关键字就会被改写，还拖慢全部流量。
+- **被调用的脚本要标 `mirror_only: true`，不进订阅清单**（2026-11 踩到，且第一次修复时
+  理由就写错了）。先搞清楚机制：`opt-parser=true` 的 `.js` 订阅是**自包含重写**——
+  由 `[general] resource_parser_url` 指定的解析器（KOP-XIAO resource-parser）下载该 JS、
+  **读取它头部注释里的 `[rewrite_local]` 声明块**，提取出规则，文件本体留作脚本。
+  missav / panda / xcz / bloomberg / bdyybata1 都靠这个生效，头部必须带 `[rewrite_local]`。
+  `amap.clean.js` 头部**没有**这个声明块（它只是被 `AmapClean.conf` 引用的脚本本体），
+  挂成订阅后解析器提取不到任何规则 → 变成一条无效订阅。
+  ⚠️ 不是「会变成全局脚本跑在所有流量上」——那是错的，纯 JS 不会被 QX 当全局脚本执行。
   加 `mirror_only: true` 后文件照常镜像到 `dist/qx/rewrites/` 供引用，但不写进清单。
-  新增"被引用脚本"类条目时必须检查这一点。
+  判断标准：**这个 .js 是自己挂订阅（头部要有 [rewrite_local] 声明），还是被 .conf 引用
+  （mirror_only）**。二选一，别两头都占。
+- **模块顶层的 `dict(CFG[...])` 快照不会跟着运行时修改走**（2026-11 policy 图标一直没自托管的根因）。
+  `QX_ICONS = dict(CFG_QX["icons"])` 在 import 时就固化为上游地址；`build_qx_assets()` 后来
+  只改了 `CFG_QX["icons"]`，忘了同步这个快照。于是公开模板 `[policy]` 段的 `img-url`
+  一直是 `raw.githubusercontent.com` 原始地址——`dist/qx/scripts/` 里图标镜像得好好的，
+  但配置里压根没引用。教训：**同一份数据不要在模块顶层再拷一份快照**；要么用的地方直接读
+  `CFG_QX`，要么改的时候同步所有副本。排查「配置里的值和预期不符」时，先怀疑是不是
+  读了一个 import 时固化的旧快照。
 - **`git add -A` 已经犯过三次**（`.workbuddy/memory/` 一次、`rewrites/cached/` 两次）。
   提交前必须看 `git status --short`，新出现的目录要确认该不该入库；
   缓存类目录一律先加 `.gitignore` 再提交。
