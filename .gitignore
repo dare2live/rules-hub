@@ -36,3 +36,6 @@ backups/
 
 # 本机专属配置（含节点引入与私有 IP），绝不进公开仓库
 config/local.surge.yaml
+
+# 构建期缓存：镜像下来的第三方脚本与图标，不入库
+rewrites/cached/
