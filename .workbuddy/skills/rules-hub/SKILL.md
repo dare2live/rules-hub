@@ -101,11 +101,15 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 6. **QX 能解 br 和 zstd**，别把空响应当成压缩问题。
 7. 出问题先看 `https://dare2live.github.io/rules-hub/qx/selftest.html`，顶部绿色横幅 = MITM 通。
    没横幅先查证书信任，别去改规则。
-8. **只有 `*_remote` 三个段会自动更新**：`[server_remote]` 节点、`[filter_remote]` 分流、
-   `[rewrite_remote]` 重写。`[general] [dns] [policy] [mitm] [filter_local] [rewrite_local] [task_local]`
-   是配置本体，QX **没有整份配置的自动刷新**，改了必须手动导入一次。
-   改 `rules/*.txt` 通常不用动手机；但 `direct.txt` 会同时写进 `[filter_local]`（内联白名单）
-   和 `[filter_remote]`，所以改直连规则**仍需手动导入**。
+8. **`*_remote` 三个段要分清「资源内容」和「条目清单」**：
+   `[server_remote]` `[filter_remote]` `[rewrite_remote]` 指向的**资源内容**会按
+   `update-interval` 自动拉取（改 `rules/*.txt`、改重写文件内容都属于这类，不用动手机）；
+   但**段里的条目清单**（新增/停用某个订阅、改 tag、改 enabled）是配置本体，
+   设备不会自己更新 —— 删掉一个节点订阅却不重新导入，手机上就还挂着那个订阅。
+   `update_qx.sh` 的 `extract_body()` 已经把这三个段纳入快照比较，就是为了抓住这类改动。
+   `[general] [dns] [policy] [mitm] [filter_local] [rewrite_local] [task_local]` 全是本体，
+   改了必须手动导入一次。另外 `rules/direct.txt` 会同时写进 `[filter_local]`（内联白名单）
+   和 `[filter_remote]`，所以**改直连规则仍需手动导入**。
 9. **重写文件里内联引用的脚本也必须自托管**。`mirror_inline_scripts()` 会把
    `script-response-body` 后面的外部 URL 下载镜像到 `dist/qx/rewrites/scripts/`。
    只把 `.conf` 本身自托管是不够的 —— 文件从国内拿得到、它要用的脚本却要回 GitHub 拿，

@@ -20,13 +20,20 @@ SNAP=".private/last_qx_body.conf"   # 上次发布时「配置本体」的快照
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
 
-# 只抽「必须重新导入才生效」的段落。远程段（*_remote）不抽 —— 它们会自己更新。
+# 只抽「必须重新导入才生效」的段落。
+#
+# 注意 *_remote 三个段有两种变化，别混淆：
+#   1) 资源内容变了（rules/*.txt 改了）→ 设备按 update-interval 自己拉，不用管；
+#   2) 段里的条目清单变了（新增/停用某个订阅、改了 tag 或 enabled）→ 这是配置本体，
+#      不重新导入设备根本不知道有这个订阅。删了个节点订阅却不导入，手机上就还挂着。
+# 所以这三个段的条目本身也要进快照比较，只是比较时要剥掉 update-interval 之类的噪音。
 extract_body() {
   awk '
     /^\[/ { sec=$0; gsub(/[\[\]]/,"",sec)
       keep = (sec=="general" || sec=="dns" || sec=="policy" || sec=="mitm" \
            || sec=="filter_local" || sec=="rewrite_local" || sec=="task_local" \
-           || sec=="http_backend")
+           || sec=="http_backend" \
+           || sec=="filter_remote" || sec=="rewrite_remote" || sec=="server_remote")
       next }
     { if (keep) print }
   ' "$1"
