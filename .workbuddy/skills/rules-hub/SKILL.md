@@ -119,6 +119,40 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 - 测试点选择：Mac 跑独立代理客户端（utun + Fake-IP）时，其流量不经过路由器分流，
   不能当路由器侧的验证点。验证路由器行为要用手机连 WiFi。
 
+## 每次改动后必查的清单
+
+不要只验证「build 没报错」。下面每一条都曾在实际配置里出过问题，逐项过：
+
+1. **策略组引用完整性**：解析 `static=名,...` / `tag=名`，确认每个成员都能解析到
+   （节点 tag / 其它策略组 / 内置 `proxy` `direct` `reject`）。
+2. **`final` / `MATCH` / `FINAL` 必须是最后一条**，后面不能再有规则。
+3. **规则集交叉冲突**：不同业务 `.list` 之间、本地内联白名单与远程业务集之间取交集。
+4. **immunity 生效**：`reject.list ∩ (unbreak ∪ direct)` 必须为空。
+5. **MITM 覆盖**：对**启用中**的重写订阅，提取 `script-*` 规则的 URL 主机，
+   逐个验证被 `[mitm] hostname` 覆盖。只统计 `script-*`，`url` 重定向类不需要解密；
+   注释行和停用订阅要排除，否则会得到一堆假阳性。
+6. **外部依赖**：统计产物里所有非自托管的 URL。重写内联脚本、资源解析器、
+   `[task_local]` 脚本、策略组图标都要自托管 —— 上游删了也不该影响我们。
+7. **外部资源是否 404**：图标/解析器地址逐个 `curl -o /dev/null -w '%{http_code}'`。
+   曾经 `Claude.png` `Tencent.png` 上游已删而配置里挂了很久，
+   表现为「策略组没图标，且每次加载都要请求一个不存在的图」。
+8. **三端一致性**：同一条改动要看 Surge / QX / Clash 三边都落地了。
+   曾经只给 Surge 加了 `process_platforms`，Clash 侧漏了，死规则多留了两个月。
+
+## 已踩过的具体坑（补充）
+
+- **`git add -A` 会把构建缓存带进公开仓库**。已经犯过两次（`.workbuddy/memory/`、
+  `rewrites/cached/`）。提交前先看 `git status --short`，新出现的目录要确认该不该入库。
+  缓存类目录一律先加 `.gitignore` 再提交。
+- **二进制资源不能用 `write_text`**。图标镜像走 `fetch_raw` + `write_text` 会被
+  utf-8 解码写坏，必须 `fetch_bytes` + `write_bytes`。
+- **镜像文件名要保留原始扩展名**。`xxx.png` 存成 `xxx.png.js` 后，GitHub Pages 会按
+  `text/javascript` 返回，客户端拿到错误 MIME 就用不了。
+- **QX 分流优先级是「先 `[filter_local]` 后 `[filter_remote]`」**（社区共识）。
+  所以写在本地段的 `geoip, cn, direct` 有可能抢在远程业务规则和 reject 之前 ——
+  前提是没开 QX 的「其他设置 → 分流匹配优化」（开了之后优先级按规则类型排：
+  host > host-suffix > host-keyword > geoip = ip-cidr）。**如果分流行为异常，先确认这个开关。**
+
 ## 排障顺序
 
 1. 先取证：日志、`/proc`、conntrack、耗时测量，别急着改。
