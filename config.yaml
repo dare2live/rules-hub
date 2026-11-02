@@ -29,6 +29,8 @@ policies:
   - name: "Claude"
     type: "select"
     desc: "Claude 专属通道（锁定新加坡）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "Lightsail Singapore"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "Lightsail Singapore HY2"
@@ -38,6 +40,8 @@ policies:
   - name: "GoogleAI"
     type: "select"
     desc: "Gemini / Antigravity 专属通道（美区优选/新加坡，杜绝香港）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "proxy"
     default_select: "🇺🇸 美国自动优选"
     proxies:
       - "🇺🇸 美国自动优选"
@@ -49,6 +53,8 @@ policies:
   - name: "OpenAI"
     type: "select"
     desc: "ChatGPT / Codex 专属通道（锁定美区，OpenAI 对新加坡出口风控更严）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "proxy"
     default_select: "🇺🇸 美国自动优选"
     proxies:
       - "🇺🇸 美国自动优选"
@@ -59,6 +65,8 @@ policies:
   - name: "WorkBuddyCN"
     type: "select"
     desc: "WorkBuddy 国内服务（workbuddy.cn / codebuddy.cn / copilot.tencent.com），默认直连"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "DIRECT"
     default_select: "DIRECT"
     proxies:
       - "DIRECT"
@@ -67,6 +75,8 @@ policies:
   - name: "WorkBuddy"
     type: "select"
     desc: "腾讯 WorkBuddy AI 加速通道（境外侧，走新加坡）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "proxy"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "🇸🇬 新加坡自动备用"
@@ -76,6 +86,8 @@ policies:
   - name: "Proxy"
     type: "select"
     desc: "全球通用外网加速（X、GitHub、Google 搜索）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "proxy"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "🇸🇬 新加坡自动备用"
@@ -88,6 +100,8 @@ policies:
   - name: "Media"
     type: "select"
     desc: "国际流媒体（YouTube、Netflix、Spotify）"
+    # QX 侧默认选中项（成员列表第一个）
+    qx_default: "proxy"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "🇸🇬 新加坡自动备用"

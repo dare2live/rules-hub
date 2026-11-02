@@ -562,6 +562,22 @@ def build_qx_policy_block(config, node_tags):
         for builtin in ("proxy", "direct"):
             if builtin not in members:
                 members.append(builtin)
+        # 默认选中项 = 成员列表的第一个。
+        # config.yaml 里用 qx_default 指定，避免把「哪组默认走哪」写死在代码里。
+        # 取值可以是节点名、内置策略（proxy / direct / reject）、或别的策略组名。
+        #
+        # 顺序是硬的：必须排在补齐内置策略之后。否则 qx_default 写成 proxy / direct
+        # 时它还不在 members 里，下面这段会静默什么都不做。
+        default_first = p.get("qx_default")
+        if default_first:
+            df = {
+                "DIRECT": "direct",
+                "REJECT": "reject",
+                "Proxy": names.get("Proxy", "Proxy"),
+            }.get(default_first, default_first)
+            if df in members:
+                members.remove(df)
+                members.insert(0, df)
         if not members:
             members = ["proxy"]
         name = names[key]
@@ -804,6 +820,68 @@ def build_qx(config, rule_data, produced=None):
     validate_qx_config(text, "dist/qx/profile.conf")
 
 
+# 重写文件内部还会引用别的脚本（script-response-body 等），这些 URL 绝大多数
+# 指向 raw.githubusercontent.com。而重写自己是被镜像到自托管地址的，
+# 于是形成一个错位：文件从国内能拿到，它要用的脚本却要回 GitHub 拿。
+# 国内直连环境下 QX 拉这些脚本经常超时，请求被阻塞 ——
+# 表现为 App 某些页面加载不出来、提示「网络不畅」。
+# 所以脚本也要跟着镜像，和设备拉重写文件走同一条路。
+SCRIPT_REF_RE = re.compile(
+    r"\b(script-(?:response-body|request-body|echo-response|analyze-echo-response"
+    r"|request-header|response-header))\s+(https?://[^\s]+)"
+)
+SCRIPT_CACHE_DIR = REWRITES_CACHE_DIR / "scripts"
+
+
+def _script_mirror_name(url):
+    base = url.split("?")[0].rstrip("/").split("/")[-1]
+    if not base.endswith(".js"):
+        base += ".js"
+    return hashlib.md5(url.encode("utf-8")).hexdigest()[:8] + "-" + base
+
+
+def mirror_inline_scripts(content, base_url, rw_id):
+    """把重写文件里引用的外部脚本镜像到自托管目录，返回 (新内容, 镜像数量)。"""
+    SCRIPT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    out = content
+    seen = {}
+    failed = 0
+    for m in SCRIPT_REF_RE.finditer(content):
+        url = m.group(2)
+        if "github" not in url:
+            continue
+        # 自己托管的地址里也含 "github"（*.github.io），别把自己再镜像一遍
+        if url.startswith(base_url):
+            continue
+        if url in seen:
+            out = out.replace(url, seen[url])
+            continue
+        name = _script_mirror_name(url)
+        cache = SCRIPT_CACHE_DIR / name
+        text = ""
+        if cache.exists() and time.time() - os.path.getmtime(cache) < 7 * 86400:
+            text = read_text(cache)
+        else:
+            got = fetch_raw(url, timeout=10)
+            if got and not is_html_payload(got):
+                text = got
+                write_text(cache, text)
+            elif cache.exists():
+                text = read_text(cache)
+        if not text:
+            # 镜像不了就保留原地址：宁可脚本偶尔拉不到，也不要把规则改成坏的。
+            failed += 1
+            continue
+        dest_dir = QX_DIST / "rewrites" / "scripts"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        write_text(dest_dir / name, text)
+        seen[url] = f"{base_url}/qx/rewrites/scripts/{name}"
+        out = out.replace(url, seen[url])
+    if failed:
+        print(f"   ⚠️  [Rewrites] {rw_id}: {failed} 个脚本镜像失败，保留原地址")
+    return out, len(seen)
+
+
 def build_rewrites(config):
     """Compile, mirror, and self-host Quantumult X rewrites."""
     rw_dist = QX_DIST / "rewrites"
@@ -890,6 +968,12 @@ def build_rewrites(config):
                 gh_raw_alt = url.replace("https://raw.githubusercontent.com/", "https://github.com/").replace("/refs/heads/", "/raw/")
                 content = content.replace(gh_raw_alt, self_hosted_url)
             
+        # 重写文件内部引用的脚本也要镜像到自托管，
+        # 否则「文件从国内拿得到、它要用的脚本却要回 GitHub 拿」。
+        content, n_scripts = mirror_inline_scripts(content, base_url, rw_id)
+        if n_scripts:
+            print(f"   📦 [Rewrites] {rw_id}: 镜像 {n_scripts} 个内联脚本")
+
         # Save to distribution
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
