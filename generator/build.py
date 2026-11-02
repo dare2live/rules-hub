@@ -556,6 +556,12 @@ def build_qx_policy_block(config, node_tags):
         # 兜底组（全球加速）末尾挂上自动选择，节点劣化时不用手改
         if key == "Proxy" and has_auto and auto_group not in members:
             members.append(auto_group)
+        # 每个组末尾都补上 QX 内置的 proxy 与 direct。
+        # 不补的话，更新配置后想临时把某个组切成直连，客户端里根本没有这个选项，
+        # 只能回来改配置重新生成 —— 这就是「每次更新都得手工调整」的来源。
+        for builtin in ("proxy", "direct"):
+            if builtin not in members:
+                members.append(builtin)
         if not members:
             members = ["proxy"]
         name = names[key]

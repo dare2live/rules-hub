@@ -341,10 +341,13 @@ rewrites:
 
   - id: "missav"
     name: "MissAV"
-    filename: "missav.ads.js"
+    filename: "missav.clean.js"
     # 上游版本停在 2025.12，站点广告位已换成 go.mayzaent.com / t.rallytrck.website，
-    # 上游选择器一个都没覆盖到，所以改为本地维护（rewrites/local/missav.ads.js）。
-    local_file: "rewrites/local/missav.ads.js"
+    # 上游选择器一个都没覆盖到，所以改为本地维护。
+    # v2（missav.clean.js）补掉了「内容已屏蔽但透明浮层和关闭 X 还在」的问题：
+    # 用 :has() 干掉装广告的 fixed 容器，再加 MutationObserver 清理 JS 延迟插入的浮层。
+    # 改脚本内容必须换文件名 —— QX 按 URL 缓存脚本本体，不换名设备不会重新下载。
+    local_file: "rewrites/local/missav.clean.js"
     opt_parser: true
     enabled: true
     desc: "MissAV 网页去广告与弹窗拦截（本地维护，2026-10 实测广告位）"
