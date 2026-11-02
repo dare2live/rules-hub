@@ -141,6 +141,13 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 
 ## 已踩过的具体坑（补充）
 
+- **本地能生成 ≠ CI 能生成**。`user_qx_input.txt` 是 gitignore 的，CI 上没有它，
+  所以 `generate_personal_qx_config()` 在 CI 里直接 return。凡是个人配置引用的
+  自托管资源，必须能在 CI 上独立产出 —— 做法是列进 `config/qx.yaml` 的
+  `icons` / `assets`，由 `build_qx_assets()` 统一镜像（不依赖任何本地私有文件）。
+  曾经把资源解析器改成了自托管链接，结果 CI 生成不出来、线上全是 404，
+  **比直接用上游链接还糟**。改完这类东西必须模拟 CI 验证一次：
+  `mv user_qx_input.txt /tmp/ && python3 generator/build.py && ls dist/qx/scripts/`
 - **`git add -A` 会把构建缓存带进公开仓库**。已经犯过两次（`.workbuddy/memory/`、
   `rewrites/cached/`）。提交前先看 `git status --short`，新出现的目录要确认该不该入库。
   缓存类目录一律先加 `.gitignore` 再提交。
