@@ -153,7 +153,13 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 - GitHub Pages 偶发 `Deployment temporarily failed` 是基础设施问题，构建其实是成功的；
   gh-pages 镜像在 Pages 部署之前就推上去了，可用 jsDelivr 验证。
 - `gh run list --json` 返回 UTC，看"今天跑没跑"必须换算北京时间。
-- **Mac 上 Bash 的 `grep` 管道会返回空**（多次复现）。排查代码一律用 Grep 工具，不要用 `grep ... | head`。
+- **改脚本要用 node 跑一遍模拟输入**，别只信 build 通过。用 `vm.runInNewContext`
+  注入 `$request` / `$response` / `$done`，至少覆盖五例：正常命中、不含关键字、
+  非 JSON（protobuf 乱码）、空响应、HTML 错误页。断言两件事：
+  ① `$done` 恰好调用 1 次（0 次 = 请求挂死，2 次 = 有分支漏兜底）；
+  ② 异常情况必须原样放行（`$done({})`）。
+- **Mac 上 Bash 的 `grep` 会返回空**（多次复现，连 `grep -n "Amap"` 这种简单调用
+  也复现过）。排查代码一律用 Grep 工具，不要用 `grep ... | head`。
 - 测试点选择：Mac 跑独立代理客户端（utun + Fake-IP）时，其流量不经过路由器分流，
   不能当路由器侧的验证点。验证路由器行为要用手机连 WiFi。
 
@@ -186,6 +192,15 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   曾经把资源解析器改成了自托管链接，结果 CI 生成不出来、线上全是 404，
   **比直接用上游链接还糟**。改完这类东西必须模拟 CI 验证一次：
   `mv user_qx_input.txt /tmp/ && python3 generator/build.py && ls dist/qx/scripts/`
+- **净化规则要用「黑名单删除」，不要用「白名单保留」**。上游对高德「我的页面」
+  写的是「只保留 `dataType == MyOrderCard / FrequentLocation` 两种卡片」，
+  高德一改字段名，过滤结果就是空数组 —— 整页被清空，比不净化还糟。
+  黑名单删除的失败模式是「没效果」，白名单保留的失败模式是「清空页面」。
+  判断依据用**可见文本**（标题）而不是内部字段名，字段会变、用户看得见的字不会变。
+- **`valid_rewrite_payload()` 会误杀本地纯 JS 脚本**。它要求内容含
+  `hostname` / `url` / `script-` / `reject` 等标记，本意是防上游返回 HTML 错误页，
+  但被调用的脚本本体（如 `amap.clean.js`）本来就不含这些标记——标记在引用它的
+  `.conf` 里。本地文件（`local_file`）已改为只挡空文件和 HTML，不要再加标记要求。
 - **第三方脚本没有 try/catch 会把请求挂死**（2026-11 高德的根因）。
   `830f361b-amap.js` 顶部无条件 `JSON.parse($response.body)`，高德接口只要返回非 JSON
   （protobuf / 空响应 / 网关错误页），脚本抛异常后拿不到 `$done`，QX 的请求就挂到超时——
