@@ -5,6 +5,11 @@ description: Rules Hub 多端代理规则编译与分发项目的操作规范与
 
 # Rules Hub 操作规范
 
+> 这份文件在两处各有一份，内容必须一致：
+> 项目级 `/Users/dp/Documents/M/Rules/.workbuddy/skills/rules-hub/SKILL.md`（入库，是源头）
+> 和用户级 `~/.workbuddy/skills/rules-hub/SKILL.md`（保证任何会话都能加载）。
+> 改了这边，记得 `cp` 过去。
+
 单一数据源：`config.yaml` + `rules/*.txt` + `config/*.yaml` + `web/` `templates/` 模板，
 由 `generator/build.py` 编译出六端产物。**改源头，不要改产物。**
 
@@ -17,6 +22,7 @@ bash scripts/update_qx.sh             # iOS 的 QX：生成→推 KV→判断要
 ./scripts/sync.sh                     # 只重新生成 + 推私有侧（上面两个脚本的底层）
 python3 scripts/publish_private.py --show    # 忘了口令
 python3 scripts/publish_private.py --rotate  # 口令泄露
+cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了本文件必须同步，否则下次会话加载不到
 ```
 
 改了规则：commit + push，CI 每天北京 04:00 自动构建，设备端自己拉。
@@ -37,6 +43,34 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
 | `dist/` | 产物，不入库 |
 
 改看板、自检页、路由器脚本直接改对应文件，**不要动 Python**。
+
+## 六端同步矩阵：改一处，哪些端自动、哪些要手动
+
+判定口诀：**规则集 = 自动；配置本体 = 手动。**
+
+| 改动位置 | QX (iOS) | Surge (Mac) | 小火箭 | Clash | 软路由 |
+|---|---|---|---|---|---|
+| `rules/*.txt` 业务规则（claude/openai/proxy/reject…） | 自动 | 自动 | 自动 | 自动 | 自动（周日 04:10 cron） |
+| `rules/direct.txt` / `unbreak.txt` | **手动导入** | 自动 | 自动 | 自动 | 自动 |
+| `config.yaml` 策略组增减 / 规则源增减 | **手动导入** | 跑 `update_surge.sh` | 手动加引用 | **手动导入** | 自动 |
+| `config/surge.yaml`（General 等） | — | 跑 `update_surge.sh` | — | — | — |
+| 重写脚本（`rewrites:`） | 自动 | 不输出 | 不输出 | 不输出 | 不输出 |
+| `meta` / `web/` / `templates/router/` | — | — | — | — | 自动（CI 推 Pages + gh-pages） |
+
+为什么会这样：
+
+- 各端引用的都是**远程规则集**（QX `filter_remote`、Surge `RULE-SET`、Clash
+  `rule-providers`、小火箭自己的规则集订阅），带 `update-interval=86400`，
+  所以改 `rules/*.txt` 推上去之后，所有 App 自己就会拉到新版，**不用逐个提醒**。
+- 例外是 QX：`rules/direct.txt` 除了进远程集，还会被 `build_qx_inline_direct_rules()`
+  内联进 `[filter_local]`。而 `[filter_local]` 属于配置本体，QX **没有整份配置的
+  自动刷新**，所以改直连规则必须手动导入一次。用 `update_qx.sh` 会自动比对并提示。
+- Mac 的 Surge 产物**故意不带** `#!MANAGED-CONFIG`（因为有 `config/local.surge.yaml`
+  时它就是拿来直接用的成品，不能再被线上版本冲掉），所以必须跑 `update_surge.sh`。
+- 重写目前**只有 QX 一端有产物**（`dist/qx/rewrites/`）。Surge / 小火箭 / Clash
+  侧不输出重写，排查重写类问题不需要看它们。
+- 小火箭端只输出 `.list` 规则集，没有主配置——主配置是用户自己的，
+  规则集 URL 引用了就会自动更新。
 
 ## 硬约束
 
@@ -148,9 +182,29 @@ python3 scripts/publish_private.py --rotate  # 口令泄露
   曾经把资源解析器改成了自托管链接，结果 CI 生成不出来、线上全是 404，
   **比直接用上游链接还糟**。改完这类东西必须模拟 CI 验证一次：
   `mv user_qx_input.txt /tmp/ && python3 generator/build.py && ls dist/qx/scripts/`
-- **`git add -A` 会把构建缓存带进公开仓库**。已经犯过两次（`.workbuddy/memory/`、
-  `rewrites/cached/`）。提交前先看 `git status --short`，新出现的目录要确认该不该入库。
+- **第三方脚本没有 try/catch 会把请求挂死**（2026-11 高德的根因）。
+  `830f361b-amap.js` 顶部无条件 `JSON.parse($response.body)`，高德接口只要返回非 JSON
+  （protobuf / 空响应 / 网关错误页），脚本抛异常后拿不到 `$done`，QX 的请求就挂到超时——
+  **不报错**，只是页面一直转圈。症状是「某个页面加载不出 / 提示网络不畅」。
+  排查重写类问题第一步：看脚本有没有异常兜底、能不能保证走到 `$done`。
+  另外它对「我的页面」的 cardList 做 dataType 白名单过滤，字段对不上就把整页清空——
+  **过时的过滤逻辑和没有兜底一样致命**。修法是换成本地维护版，只拦纯广告请求、
+  不改写响应体（见 `rewrites/local/AmapSafe.conf`）。
+- **`git add -A` 已经犯过三次**（`.workbuddy/memory/` 一次、`rewrites/cached/` 两次）。
+  提交前必须看 `git status --short`，新出现的目录要确认该不该入库；
   缓存类目录一律先加 `.gitignore` 再提交。
+  已经推上去的历史要洗：
+  ```bash
+  git branch backup-before-filter main          # 先留本地备份
+  FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force \
+    --index-filter 'git rm -r --cached --ignore-unmatch rewrites/cached .workbuddy/memory' \
+    --prune-empty -- main
+  git push --force origin main
+  ```
+  两个坑：① 用 `--all` 会把备份分支一起洗掉，要留备份就写具体分支名；
+  ② `filter-branch` 打印 `Ref ... is unchanged` 但提交 SHA 其实变了，
+  判断是否生效要看 `git log --oneline -- <路径>` 是否为空，别看那句 warning。
+  洗完旧对象在 GitHub 上仍可能通过 commit SHA 直接访问，真要断根只能重建仓库。
 - **二进制资源不能用 `write_text`**。图标镜像走 `fetch_raw` + `write_text` 会被
   utf-8 解码写坏，必须 `fetch_bytes` + `write_bytes`。
 - **镜像文件名要保留原始扩展名**。`xxx.png` 存成 `xxx.png.js` 后，GitHub Pages 会按

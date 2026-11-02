@@ -68,7 +68,9 @@ else
   else
     echo "⚠️  配置本体有变化（general / dns / policy / mitm / 本地规则）。"
     echo "   这些段 QX 不会自动更新，需要手动导入一次："
-    diff "$SNAP" "$NEW" | head -20 | sed 's/^/     /'
+    # diff 有差异时退出码是 1，在 set -e + pipefail 下会让脚本在这里中断，
+    # 导致下面的快照永远不更新、每次都重复提示「需要手动导入」。
+    diff "$SNAP" "$NEW" | head -20 | sed 's/^/     /' || true
   fi
   echo
   echo "   QX 导入地址（口令等同密码，别外传）："
@@ -86,5 +88,7 @@ if ! git diff --quiet -- . 2>/dev/null || [[ -n "$(git status --porcelain 2>/dev
   echo
   echo "※ 仓库有未提交的改动。规则集托管在 GitHub Pages，"
   echo "  需要 git push 后 CI 重建，手机才拉得到新规则："
-  echo "    git add -A && git commit -m '...' && git push"
+  echo "    git status --short          # 先看清新出现的目录该不该入库"
+  echo "    git add <具体路径> && git commit -m '...' && git push"
+  echo "  （不要用 git add -A —— 构建缓存和个人文件已经被它带进公开仓库三次了）"
 fi
