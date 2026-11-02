@@ -282,8 +282,3 @@ DOMAIN-SUFFIX,tianyancha.com
 DOMAIN-SUFFIX,amap.com
 DOMAIN-SUFFIX,autonavi.com
 DOMAIN-SUFFIX,amap.cn
-
-# 高德地图（车机互联、账号、路线规划全走国内，绕境外会被判异地导致功能不可用）
-DOMAIN-SUFFIX,amap.com
-DOMAIN-SUFFIX,autonavi.com
-DOMAIN-SUFFIX,amap.cn

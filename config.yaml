@@ -271,8 +271,26 @@ rewrites:
     filename: "AmapAds.conf"
     upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/AmapAds.conf"
     opt_parser: false
+    # 2026-11 停用：这个订阅把 8 个业务接口交给 830f361b-amap.js 做响应体改写，
+    # 而该脚本顶部无条件 JSON.parse($response.body) 且没有 try/catch。高德接口
+    # 只要返回非 JSON（protobuf / 空响应 / 网关错误页），脚本抛异常后拿不到
+    # $done，QX 请求挂死到超时 —— 表现为「我的页面加载不出」「首页网络不畅」
+    # 「发送车机失败」，且不报任何错。脚本停更于 2025-08-30，高德已改版。
+    # 替代方案见下面的 amap_safe（只拦纯广告请求，不碰响应体）。
+    enabled: false
+    desc: "高德地图首页及路线推荐广告净化（已停用：脚本无异常兜底会挂死请求，见上方注释）"
+
+  - id: "amap_safe"
+    name: "高德地图净化[安全版]"
+    filename: "AmapSafe.conf"
+    # 本地维护：只保留拦截后不影响任何功能的广告请求（reject 类），
+    # 不用脚本改写响应体，因此不存在「脚本抛异常 → 请求挂死」的风险。
+    # 去掉了上游里会误伤功能的几条：我的页面 cardList 过滤、首页信息流、
+    # 订单/车机 order_web、天气、以及 amdc 调度（改调度结果会让高德判链路失败）。
+    local_file: "rewrites/local/AmapSafe.conf"
+    opt_parser: false
     enabled: true
-    desc: "高德地图首页及路线推荐广告净化"
+    desc: "高德地图开屏广告与路线广告拦截（本地安全版，不改写响应体）"
 
   - id: "applet_ads"
     name: "微信小程序去广告@ddgksf2013"
