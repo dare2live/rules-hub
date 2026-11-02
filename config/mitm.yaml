@@ -1,0 +1,72 @@
+# [mitm] hostname 的推导规则
+#
+# QX 的 hostname 必须写明解密哪些主机，重写才会生效；上游重写文件里绝大多数
+# 是裸规则（没有 hostname 行），所以从规则本身反推。只解密「确实有重写规则」
+# 的主机，比无脑 MITM 全网更省电，也更不容易搞坏证书校验。
+
+# 合法主机名：允许 *. 前缀
+host_regex: '^(?:\*\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$'
+
+# 这些是「二级后缀」，通配目标要取三级而不是二级，
+# 否则 *.com.cn 等于把全国 .cn 站点都 MITM 了。
+multi_tld:
+  - com.cn
+  - net.cn
+  - org.cn
+  - gov.cn
+  - edu.cn
+  - ac.cn
+  - co.uk
+  - com.hk
+  - com.tw
+  - co.jp
+  - com.sg
+
+# 正则写法无法机械转换时的手工映射
+overrides:
+  .*\.xima\..*\.com:
+    - '*.ximalaya.com'
+  xima\..*\.com:
+    - '*.ximalaya.com'
+  .*flyert.*:
+    - '*.flyert.com'
+  .*zhijianmedia\.cn:
+    - '*.zhijianmedia.cn'
+
+# 绝不 MITM：银行 / 支付 / 政务 / 身份 / 苹果系统服务。
+# 判定依据不是「有没有广告」，而是「MITM 失败的后果」——
+# 这几类失败的后果是打不开、登不上，比多一个广告严重得多。
+deny_suffix:
+  # 银行 / 支付 / 征信
+  - bankcomm.com
+  - bankcomm.cn
+  - ccb.com
+  - ecitic.com
+  - pingan.com
+  - spdb.com.cn
+  - icbc.com.cn
+  - abchina.com
+  - boc.cn
+  - cmbchina.com
+  - unionpay.com
+  - 95516.com
+  - alipay.com
+  - tenpay.com
+  - psbc.com
+  # 政务 / 身份 / 出行凭证
+  - gov.cn
+  - 12306.cn
+  # 微信安全校验：MITM 后可能登不上
+  - wechat.com
+  # 苹果系统服务
+  - apple.com
+  - icloud.com
+
+# 公网后缀本身不能当通配目标
+deny_exact:
+  - '*.com.cn'
+  - '*.net.cn'
+  - '*.org.cn'
+  - '*.gov.cn'
+  - '*.com'
+  - '*.cn'

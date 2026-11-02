@@ -1,0 +1,10 @@
+# 软路由规则的外部数据源
+# 拉取后缓存在 data/，超过 max_age_days 才重新拉。
+# 三个源都配了 GitHub Pages + jsDelivr 双源兜底，见 config.yaml 的 meta。
+
+chnroute: https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt
+gfwlist: https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt
+cdn: https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf
+
+# 缓存有效期（天）。设太短会拖慢每次构建，太长拿不到新增的国内网段。
+max_age_days: 7

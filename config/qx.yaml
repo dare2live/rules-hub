@@ -1,0 +1,67 @@
+# Quantumult X 侧的映射与图标
+# 改这里就能改 QX 输出，不需要动 Python。
+
+# 全端策略组名 -> QX 里的显示名。
+# QX 内置 direct / reject / proxy，其余组名沿用 config.yaml 的定义。
+name_map:
+  DIRECT: direct
+  REJECT: reject
+  Proxy: 全球加速
+  Media: 国际媒体
+
+# 策略组图标（img-url）。没有图标的组不加 img-url 参数，不影响功能。
+icons:
+  Claude: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png
+  GoogleAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png
+  WorkBuddy: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png
+  WorkBuddyCN: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png
+  OpenAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png
+  全球加速: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
+  国际媒体: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png
+  兜底分流: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png
+  自动选择: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png
+
+# [policy] 段的输出顺序。
+# 顺序是硬要求：被别的组引用的组必须先定义，否则 QX 报前向引用错误。
+policy_order:
+  - Proxy
+  - Media
+  - Claude
+  - GoogleAI
+  - OpenAI
+  - WorkBuddyCN
+  - WorkBuddy
+
+# 规则集 id -> QX 侧 tag 名
+tag_map:
+  unbreak: 规则修正
+  custom_direct: 个人直连
+  workbuddy_cn: WorkBuddyCN
+  workbuddy: WorkBuddy
+  claude: Claude
+  google_ai: GoogleAI
+  media: 国际媒体
+  openai: OpenAI
+  tiktok: TikTok
+  proxy: 全球加速
+  reject: 广告拦截
+
+# 导入 QX 时必须存在的段落，缺任意一个都会被判为非法配置。
+# 历史教训：线上 profile 曾缺 rewrite_local 等 4 段，表现为「导入成功但重写全部静默失效」。
+required_sections:
+  - general
+  - dns
+  - policy
+  - server_local
+  - server_remote
+  - filter_local
+  - filter_remote
+  - rewrite_local
+  - rewrite_remote
+  - task_local
+  - http_backend
+  - mitm
+
+# 国内解析器。直连域名的 DNS 一律指向它，
+# 否则境外解析器会把国内 CDN 指到境外节点，再被 geoip 判成非 CN 送进代理。
+domestic_dns: 223.5.5.5

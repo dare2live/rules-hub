@@ -34,18 +34,31 @@ FANCYSS_DIST = ROUTER_DIST / "fancyss"
 WEB_DIST = DIST_DIR / "web"
 REWRITES_CACHE_DIR = BASE_DIR / "rewrites" / "cached"
 
-# Quantumult X 校验配置时必须存在的段落（缺任意一个都会导入失败）
-REQUIRED_QX_SECTIONS = [
-    "general", "dns", "policy", "server_local", "server_remote",
-    "filter_local", "filter_remote", "rewrite_local", "rewrite_remote",
-    "task_local", "http_backend", "mitm",
-]
+CONFIG_DIR = BASE_DIR / "config"
 
-# 上游数据源（用于软路由规则，7 天刷新一次并落地缓存）
-CHNROUTE_URL = "https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt"
-GFWLIST_URL = "https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt"
-CDN_URL = "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/accelerated-domains.china.conf"
-DATA_MAX_AGE = 7 * 86400
+
+def _load_yaml(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+# 客户端映射、图标、策略组顺序、MITM 规则、上游数据源全部外置到 config/ 下，
+# 改行为请改配置，不要改代码。
+CFG_QX = _load_yaml(CONFIG_DIR / "qx.yaml")
+CFG_MITM = _load_yaml(CONFIG_DIR / "mitm.yaml")
+CFG_DATA = _load_yaml(CONFIG_DIR / "data_sources.yaml")
+
+# Quantumult X 校验配置时必须存在的段落（缺任意一个都会导入失败）
+REQUIRED_QX_SECTIONS = list(CFG_QX["required_sections"])
+
+# 上游数据源（用于软路由规则，定期刷新并落地缓存）
+CHNROUTE_URL = CFG_DATA["chnroute"]
+GFWLIST_URL = CFG_DATA["gfwlist"]
+CDN_URL = CFG_DATA["cdn"]
+DATA_MAX_AGE = int(CFG_DATA["max_age_days"]) * 86400
+
+# 国内解析器：直连域名的 DNS 一律指向它
+QX_DOMESTIC_DNS = str(CFG_QX["domestic_dns"])
 
 # build_rewrites() 推导出的 MITM 主机清单，供 build_qx / generate_personal_qx_config 复用
 QX_MITM_STATE = {"hosts": []}
@@ -54,37 +67,13 @@ QX_MITM_STATE = {"hosts": []}
 # QX 的 [mitm] hostname 必须写明要解密哪些主机，重写才会生效。
 # 上游重写文件里绝大多数是裸规则（没有 hostname 行），所以这里从规则本身反推。
 # 只解密「确实有重写规则」的主机，比无脑 MITM 全网更省电、也更不容易搞坏证书校验。
-MITM_HOST_RE = re.compile(
-    r"^(?:\*\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$"
-)
-MITM_MULTI_TLD = (
-    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
-    "co.uk", "com.hk", "com.tw", "co.jp", "com.sg",
-)
+# 具体规则见 config/mitm.yaml。
+MITM_HOST_RE = re.compile(CFG_MITM["host_regex"])
+MITM_MULTI_TLD = tuple(CFG_MITM["multi_tld"])
 # 正则写法无法机械转换时的映射
-MITM_OVERRIDES = {
-    r".*\.xima\..*\.com": ["*.ximalaya.com"],
-    r"xima\..*\.com": ["*.ximalaya.com"],
-    r".*flyert.*": ["*.flyert.com"],
-    r".*zhijianmedia\.cn": ["*.zhijianmedia.cn"],
-}
-# 绝不 MITM：银行 / 支付 / 政务 / 身份 / 苹果系统服务。
-# 宁可少去这几个广告，也不要让 App 因为证书校验失败而报错。
-# 判定依据：这些域名一旦 MITM 失败，后果是「打不开 / 登不上」，不是「多一个广告」。
-MITM_DENY_SUFFIX = (
-    # 银行 / 支付 / 征信
-    "bankcomm.com", "bankcomm.cn", "ccb.com", "ecitic.com", "pingan.com",
-    "spdb.com.cn", "icbc.com.cn", "abchina.com", "boc.cn", "cmbchina.com",
-    "unionpay.com", "95516.com", "alipay.com", "tenpay.com", "psbc.com",
-    # 政务 / 身份 / 出行凭证
-    "gov.cn", "12306.cn",
-    # 微信安全校验（MITM 后可能登不上，比开屏广告严重得多）
-    "wechat.com",
-    # 苹果系统服务
-    "apple.com", "icloud.com",
-)
-# 公网后缀本身不能当通配目标（否则等于 MITM 整个 .com.cn）
-MITM_DENY_EXACT = {"*.com.cn", "*.net.cn", "*.org.cn", "*.gov.cn", "*.com", "*.cn"}
+MITM_OVERRIDES = dict(CFG_MITM["overrides"])
+MITM_DENY_SUFFIX = tuple(CFG_MITM["deny_suffix"])
+MITM_DENY_EXACT = set(CFG_MITM["deny_exact"])
 
 
 def _expand_alternation(host):
@@ -368,20 +357,7 @@ def extract_domain(rule_line):
 
 
 def get_qx_tag(rule_id):
-    tag_map = {
-        "unbreak": "规则修正",
-        "custom_direct": "个人直连",
-        "claude": "Claude",
-        "google_ai": "GoogleAI",
-        "workbuddy_cn": "WorkBuddyCN",
-        "workbuddy": "WorkBuddy",
-        "media": "国际媒体",
-        "openai": "OpenAI",
-        "tiktok": "TikTok",
-        "proxy": "全球加速",
-        "reject": "广告拦截",
-    }
-    return tag_map.get(rule_id, rule_id)
+    return CFG_QX["tag_map"].get(rule_id, rule_id)
 
 
 def map_target_to_qx(target):
@@ -526,24 +502,14 @@ def build_surge(config, rule_data):
         f.write("\n".join(profile) + "\n")
 
 
-QX_NAME_MAP = {"DIRECT": "direct", "REJECT": "reject", "Proxy": "全球加速", "Media": "国际媒体"}
-QX_ICONS = {
-    "Claude": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Claude.png",
-    "GoogleAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png",
-    "WorkBuddy": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
-    "WorkBuddyCN": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Tencent.png",
-    "OpenAI": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png",
-    "全球加速": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png",
-    "国际媒体": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png",
-    "兜底分流": "https://raw.githubusercontent.com/Orz-3/mini/master/Color/Final.png",
-    "自动选择": "https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Auto.png",
-}
+QX_NAME_MAP = dict(CFG_QX["name_map"])
+QX_ICONS = dict(CFG_QX["icons"])
 
 
 def build_qx_policy_block(config, node_tags):
     """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。"""
     policies = {p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"}
-    order = ["Proxy", "Media", "Claude", "GoogleAI", "OpenAI", "WorkBuddyCN", "WorkBuddy"]
+    order = list(CFG_QX["policy_order"])
     names = {k: QX_NAME_MAP.get(k, k) for k in policies}
     node_set = set(node_tags)
     lines = []
@@ -631,26 +597,7 @@ def validate_qx_config(text, label):
 # ===== 自检页：用来判断 MITM / 重写到底有没有生效 =====
 # 没有这一步，用户只能靠"广告还在不在"猜，而广告有没有是多个原因叠加的结果。
 # 这里放一条只作用于自己站点的重写：打开页面看到绿色横幅 = MITM 通、脚本执行通。
-SELFTEST_JS = r'''/*
- * Rules Hub 重写自检脚本
- * 只作用于 https://<base_url>/qx/selftest.html
- * 作用：在页面顶部插入一条横幅，证明 MITM 与脚本执行链路是通的
- */
-const body = $response.body || "";
-const banner = [
-  '<div style="position:fixed;top:0;left:0;right:0;z-index:99999;',
-  'background:#16a34a;color:#fff;font:600 15px/1.6 -apple-system,sans-serif;',
-  'padding:14px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3)">',
-  '✅ 重写已生效（MITM 正常）</div>'
-].join("");
-let out;
-if (body.indexOf("</body>") !== -1) {
-  out = body.replace("</body>", banner + "</body>");
-} else {
-  out = banner + body;
-}
-$done({ body: out });
-'''
+
 
 
 def build_qx_selftest_rules(base_url):
@@ -660,54 +607,14 @@ def build_qx_selftest_rules(base_url):
     prefix = parsed[len(host):].strip("/")
     rw_dir = QX_DIST / "rewrites"
     rw_dir.mkdir(parents=True, exist_ok=True)
-    (rw_dir / "selftest.js").write_text(SELFTEST_JS, encoding="utf-8")
+    # 自检脚本外置：改脚本逻辑请改 templates/selftest.js
+    (rw_dir / "selftest.js").write_text(
+        read_text(BASE_DIR / "templates" / "selftest.js"), encoding="utf-8")
 
-    html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rules Hub 重写自检</title>
-<style>
-  body{{margin:0;padding:56px 20px 40px;font:16px/1.7 -apple-system,"PingFang SC",sans-serif;
-       background:#0f172a;color:#e2e8f0}}
-  h1{{font-size:20px;margin:0 0 8px}}
-  .sub{{color:#94a3b8;font-size:14px;margin-bottom:24px}}
-  .card{{background:#1e293b;border-radius:12px;padding:16px 18px;margin-bottom:14px}}
-  .ok{{color:#4ade80;font-weight:600}}
-  .bad{{color:#f87171;font-weight:600}}
-  code{{background:#0b1220;padding:2px 6px;border-radius:4px;font-size:13px}}
-  ol{{padding-left:20px;margin:8px 0 0}}
-  li{{margin-bottom:6px}}
-</style>
-</head>
-<body>
-<h1>Rules Hub 重写自检</h1>
-<div class="sub">这个页面只有一个用途：告诉你 Quantumult X 的重写链路是否正常。</div>
-
-<div class="card">
-  <div>页面顶部如果出现<span class="ok">绿色横幅</span> → MITM 与脚本执行都正常，重写规则可以生效。</div>
-  <div>没有横幅 → 重写没跑起来，去广告自然也不会生效。</div>
-</div>
-
-<div class="card">
-  <strong>没有横幅时，按顺序检查：</strong>
-  <ol>
-    <li>Quantumult X → 设置 → <code>MITM</code> → 证书是否已安装、并在「设置 → 通用 → 关于本机 → 证书信任设置」里打开完全信任</li>
-    <li>本配置的 <code>[mitm]</code> 里 <code>hostname</code> 是否包含本页域名</li>
-    <li>重写总开关是否打开；<code>[rewrite_remote]</code> 里的条目是否处于启用状态</li>
-    <li>把本配置删掉重新导入一次（QX 有时会缓存旧的重写文件）</li>
-  </ol>
-</div>
-
-<div class="card">
-  <strong>参数</strong><br>
-  生成时间：{time.strftime("%Y-%m-%d %H:%M")}<br>
-  配置源：<code>{base_url}</code>
-</div>
-</body>
-</html>
-"""
+    # 自检页模板外置：改样式改文案请改 web/selftest.html
+    tpl = read_text(BASE_DIR / "web" / "selftest.html")
+    html = (tpl.replace("{{base_url}}", base_url)
+               .replace("{{build_time}}", time.strftime("%Y-%m-%d %H:%M")))
     (QX_DIST / "selftest.html").write_text(html, encoding="utf-8")
 
     esc_host = host.replace(".", r"\.")
@@ -725,7 +632,7 @@ def build_qx_selftest_rules(base_url):
 #   i0.hdslb    1.1.1.1 → 157.185.179.197 260ms |  223.5.5.5 → 42.59.17.129   7.7ms
 # 而且解析到境外 IP 后，geoip 会判成非 CN，把本该直连的流量送进代理。
 # 所以 rules/direct.txt 里的每个 DOMAIN-SUFFIX 都要派生一条国内 DNS 规则。
-QX_DOMESTIC_DNS = "223.5.5.5"
+# 解析器地址在 config/qx.yaml 的 domestic_dns，不再写死在这里。
 
 
 def build_qx_dns_lines():
@@ -1270,162 +1177,9 @@ def generate_personal_qx_config(config, produced=None):
     validate_qx_config(text, "QuantumultX_Personal.conf")
 
 
-ROUTER_SYNC_SH = r'''#!/bin/sh
-# ===== Rules Hub - fancyss 规则订阅同步 =====
-# 由 rules-hub 自动生成，请勿手工修改
-# 订阅源: __BASE__/router/fancyss
-BASE="__BASE__/router/fancyss"
-# 备用源（jsDelivr 读 gh-pages 分支），主源失败时自动回退；留空则关闭
-BASE_BAK="__BASE_BAK_SUB__"
-RULES="/koolshare/ss/rules"
-TMP="/tmp/ruleshub_sync"
-LOG="/tmp/ruleshub_sync.log"
+ROUTER_SYNC_SH_TEMPLATE = BASE_DIR / "templates" / "router" / "ss_rule_sync.sh"
 
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; echo "$*"; }
-
-[ -d "$RULES" ] || { echo "未检测到 fancyss 规则目录: $RULES"; exit 1; }
-mkdir -p "$TMP"
-
-# fetch <相对路径> <输出文件>
-# 依次尝试 BASE / BASE_BAK，任一成功即返回 0。
-# 下载到 HTML（GitHub Pages 404 页 / 劫持页）视为失败，自动换下一个源。
-fetch() {
-  _rel="$1"; _out="$2"
-  for _b in "$BASE" "$BASE_BAK"; do
-    [ -n "$_b" ] || continue
-    wget --no-check-certificate --timeout=25 -qO "$_out" "$_b/$_rel" || continue
-    [ -s "$_out" ] || { rm -f "$_out"; continue; }
-    if head -c 300 "$_out" | grep -qi "<html\|<!doctype"; then
-      rm -f "$_out"
-      continue
-    fi
-    return 0
-  done
-  return 1
-}
-
-same() { [ "$(md5sum "$1" | awk '{print $1}')" = "$(md5sum "$2" | awk '{print $1}')" ]; }
-
-changed=0
-
-fetch version1 "$TMP/version1" || log "version1 下载失败（仅影响版本号显示）"
-
-apply() {
-  _name="$1"; _min="$2"; _max="$3"; _vline="$4"
-  if ! fetch "$_name" "$TMP/$_name"; then
-    log "$_name 下载失败，保留原文件"
-    return
-  fi
-  _n=$(grep -c . "$TMP/$_name")
-  if [ "$_n" -lt "$_min" ]; then
-    log "$_name 条目过少($_n < $_min)，放弃覆盖"
-    return
-  fi
-  if [ "$_n" -gt "$_max" ]; then
-    log "$_name 条目异常偏多($_n > $_max)，放弃覆盖"
-    return
-  fi
-  if [ -f "$RULES/$_name" ] && same "$TMP/$_name" "$RULES/$_name"; then
-    log "$_name 已是最新 ($_n 条)"
-    return
-  fi
-  cp -f "$RULES/$_name" "$RULES/$_name.bak" 2>/dev/null
-  mv -f "$TMP/$_name" "$RULES/$_name"
-  log "$_name 已更新 ($_n 条)"
-  if [ -s "$TMP/version1" ]; then
-    _v=$(sed -n "${_vline}p" "$TMP/version1")
-    if [ -n "$_v" ] && [ -f "$RULES/version" ]; then
-      sed -i "${_vline}s|.*|$_v|" "$RULES/version"
-    fi
-  fi
-  changed=1
-}
-
-apply chnroute.txt 1000 20000 2
-apply gfwlist.conf 500 40000 1
-__CDN_APPLY__
-
-rm -rf "$TMP"
-
-if [ "$changed" = "1" ]; then
-  log "规则已变更，重启 shadowsocks 生效..."
-  dbus set ss_basic_action=1 2>/dev/null
-  sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
-
-  # 健康检查：dnsmasq 起不来就回滚，避免规则文件拖垮整网 DNS
-  i=0
-  while [ "$i" -lt 10 ]; do
-    pidof dnsmasq >/dev/null 2>&1 && break
-    i=$((i + 1))
-    sleep 2
-  done
-  if ! pidof dnsmasq >/dev/null 2>&1; then
-    log "dnsmasq 未运行，回滚到上一版规则..."
-    for _f in chnroute.txt gfwlist.conf cdn.txt; do
-      if [ -f "$RULES/$_f.bak" ]; then
-        cp -f "$RULES/$_f.bak" "$RULES/$_f"
-      fi
-    done
-    sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
-    log "已回滚并重启，请检查 /tmp/ruleshub_sync.log"
-  else
-    log "重启完成，dnsmasq 正常"
-  fi
-else
-  log "无变更，跳过重启"
-fi
-log "同步结束"
-'''
-
-ROUTER_INSTALL_SH = r'''#!/bin/sh
-# ===== Rules Hub 软路由规则订阅 - 一键安装 =====
-# 用法: wget -qO- __BASE__/router/install.sh | sh
-BASE="__BASE__/router"
-DIR="/koolshare/scripts"
-RULES="/koolshare/ss/rules"
-CRON_LINE="__CRON__"
-CRU="/usr/sbin/cru"
-
-echo "== Rules Hub 软路由规则订阅安装 =="
-[ -d "$RULES" ] || { echo "未检测到 fancyss ($RULES)，请先安装插件"; exit 1; }
-[ -d "$DIR" ] || DIR="/jffs/scripts"
-[ -d "$DIR" ] || { echo "未找到可写脚本目录"; exit 1; }
-
-wget --no-check-certificate --timeout=30 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
-head -c 300 /tmp/ss_rule_sync.sh | grep -qi "<!doctype\|<html" && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
-mv -f /tmp/ss_rule_sync.sh "$DIR/ss_rule_sync.sh"
-chmod +x "$DIR/ss_rule_sync.sh"
-echo "已安装: $DIR/ss_rule_sync.sh"
-
-for f in chnroute.txt gfwlist.conf cdn.txt version; do
-  if [ -f "$RULES/$f" ] && [ ! -f "$RULES/$f.orig" ]; then
-    cp -f "$RULES/$f" "$RULES/$f.orig"
-  fi
-done
-echo "已备份原始规则为 *.orig"
-
-[ -x "$CRU" ] || CRU=$(which cru 2>/dev/null)
-if [ -n "$CRU" ] && [ -x "$CRU" ]; then
-  "$CRU" d ruleshub_sync 2>/dev/null
-  "$CRU" a ruleshub_sync "$CRON_LINE $DIR/ss_rule_sync.sh"
-  echo "已设置定时任务: 每周日 04:10 自动同步"
-else
-  echo "警告: 未找到 cru，请手动添加计划任务: $CRON_LINE $DIR/ss_rule_sync.sh"
-fi
-
-START="/jffs/scripts/services-start"
-if [ -d /jffs/scripts ]; then
-  touch "$START"
-  chmod +x "$START"
-  if ! grep -q "ruleshub_sync" "$START"; then
-    echo "$CRU a ruleshub_sync \"$CRON_LINE $DIR/ss_rule_sync.sh\"" >> "$START"
-  fi
-  echo "已写入开机自启: $START"
-fi
-
-echo "== 立即执行一次同步 =="
-"$DIR/ss_rule_sync.sh"
-'''
+ROUTER_INSTALL_SH_TEMPLATE = BASE_DIR / "templates" / "router" / "install.sh"
 
 
 def md5_file(path):
@@ -1504,12 +1258,12 @@ def build_router(config, rule_data):
                  if router_cfg.get("update_cdn", True)
                  else "# cdn.txt 更新已关闭（config.yaml: router.update_cdn）")
     write_text(ROUTER_DIST / "ss_rule_sync.sh",
-               ROUTER_SYNC_SH.replace("__BASE__", base_url)
+               read_text(ROUTER_SYNC_SH_TEMPLATE).replace("__BASE__", base_url)
                              .replace("__BASE_BAK_SUB__", base_bak_sub)
                              .replace("__CRON__", cron_line)
                              .replace("__CDN_APPLY__", cdn_apply))
     write_text(ROUTER_DIST / "install.sh",
-               ROUTER_INSTALL_SH.replace("__BASE__", base_url).replace("__CRON__", cron_line))
+               read_text(ROUTER_INSTALL_SH_TEMPLATE).replace("__BASE__", base_url).replace("__CRON__", cron_line))
 
     # 8. Human-readable manifest
     gen_time = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -2269,589 +2023,20 @@ def build_web_admin(config, rule_data):
 
     priv_base = private_base_url()
 
-    html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rules Hub - 跨端多协议规则托管与运维看板</title>
-  <link rel="icon" href="https://fav.farm/🚀">
-  <style>
-    :root {{
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --card-border: #334155;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.15);
-      --success: #34d399;
-      --warning: #fbbf24;
-      --purple: #a78bfa;
-    }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: var(--bg);
-      color: var(--text-main);
-      padding: 2rem 1rem;
-      min-height: 100vh;
-      line-height: 1.5;
-    }}
-    .container {{
-      max-width: 960px;
-      margin: 0 auto;
-    }}
-    header {{
-      text-align: center;
-      margin-bottom: 2rem;
-    }}
-    header h1 {{
-      font-size: 2.3rem;
-      font-weight: 700;
-      color: var(--accent);
-      margin-bottom: 0.5rem;
-    }}
-    header p {{
-      color: var(--text-muted);
-      font-size: 1rem;
-    }}
-    
-    /* Status banner */
-    .status-banner {{
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 1rem 1.5rem;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }}
-    .status-item {{
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.92rem;
-    }}
-    .status-label {{ color: var(--text-muted); }}
-    .status-val {{ font-weight: 600; color: var(--accent); }}
-
-    /* Quick Action Ops Bar */
-    .ops-bar {{
-      background: #1e293b;
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 2.5rem;
-    }}
-    .ops-title {{
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }}
-    .ops-buttons {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 0.75rem;
-    }}
-    .ops-btn {{
-      background: #0f172a;
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      padding: 0.65rem 1rem;
-      border-radius: 8px;
-      text-decoration: none;
-      font-size: 0.88rem;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      transition: all 0.2s;
-    }}
-    .ops-btn:hover {{
-      border-color: var(--accent);
-      background: #172554;
-      color: #38bdf8;
-    }}
-
-    /* Grid */
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.25rem;
-      margin-bottom: 2.5rem;
-    }}
-    .card {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }}
-    .card:hover {{
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px var(--accent-glow);
-      border-color: var(--accent);
-    }}
-    .card-header {{
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
-    }}
-    .card-icon {{ font-size: 1.6rem; }}
-    .card-title {{ font-size: 1.15rem; font-weight: 600; }}
-    .card-desc {{
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-bottom: 1.25rem;
-      line-height: 1.4;
-    }}
-    .copy-btn {{
-      background: var(--accent);
-      color: #0f172a;
-      border: none;
-      padding: 0.6rem 1rem;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 0.88rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      transition: opacity 0.2s;
-    }}
-    .copy-btn:hover {{ opacity: 0.9; }}
-
-    /* Section titles */
-    .section-title {{
-      font-size: 1.3rem;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      border-bottom: 1px solid var(--card-border);
-      padding-bottom: 0.5rem;
-    }}
-
-    /* Rule detail cards */
-    .rule-detail-card {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      margin-bottom: 0.85rem;
-    }}
-    .rule-detail-header {{
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 0.5rem;
-    }}
-    .rule-detail-title {{
-      font-weight: 600;
-      font-size: 1rem;
-      color: var(--text-main);
-    }}
-    .rule-detail-meta {{
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      margin-top: 0.2rem;
-    }}
-    .badge {{
-      display: inline-block;
-      padding: 0.15rem 0.5rem;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }}
-    .badge-upstream {{ background: #1e3a8a; color: #93c5fd; }}
-    .badge-local {{ background: #064e3b; color: #6ee7b7; }}
-    .badge-sg {{ background: #064e3b; color: #34d399; }}
-    .badge-us {{ background: #1e3a8a; color: #60a5fa; }}
-    .badge-direct {{ background: #374151; color: #9ca3af; }}
-    
-    details {{
-      margin-top: 0.5rem;
-    }}
-    .toggle-btn {{
-      font-size: 0.82rem;
-      color: var(--accent);
-      cursor: pointer;
-      user-select: none;
-    }}
-    .rule-code-block {{
-      background: #0f172a;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 0.75rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.78rem;
-      max-height: 220px;
-      overflow-y: auto;
-      margin-top: 0.5rem;
-      white-space: pre-wrap;
-      color: #cbd5e1;
-    }}
-
-    /* Table */
-    .table-container {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      overflow-x: auto;
-      margin-bottom: 2rem;
-    }}
-    table {{
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 0.9rem;
-    }}
-    th, td {{
-      padding: 0.75rem 1.2rem;
-      border-bottom: 1px solid var(--card-border);
-    }}
-    th {{ color: var(--text-muted); font-weight: 600; }}
-    tr:last-child td {{ border-bottom: none; }}
-
-    .toast {{
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      background: var(--success);
-      color: #064e3b;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      font-weight: 600;
-      opacity: 0;
-      transition: opacity 0.3s;
-      pointer-events: none;
-    }}
-    .toast.show {{ opacity: 1; }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>🚀 Rules Hub</h1>
-      <p>统一源头维护 • 开源全量融合 • 自动白名单免疫 • 每日零操作自更新</p>
-    </header>
-
-    <!-- Status Banner -->
-    <div class="status-banner">
-      <div class="status-item">
-        <span class="status-label">⏱ 最后编译/同步时间:</span>
-        <span class="status-val">{build_time}</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">📊 融合规则总数:</span>
-        <span class="status-val">{total_rules} 条</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">🔄 自动同步频率:</span>
-        <span class="status-val">每日凌晨 04:00 (Cron)</span>
-      </div>
-    </div>
-
-    <!-- Quick Ops Control Panel -->
-    <div class="ops-bar">
-      <div class="ops-title">🛠 规则维护与源头控制台（点击即可在线操作）</div>
-      <div class="ops-buttons">
-        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/actions/workflows/deploy.yml" target="_blank">
-          ⚡️ 手动立即触发全量同步
-        </a>
-        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/config.yaml" target="_blank">
-          ⚙️ 添加/配置开源上游源 (config.yaml)
-        </a>
-        <a class="ops-btn" href="https://github.com/dare2live/rules-hub/edit/main/rules/direct.txt" target="_blank">
-          📝 增删直连与白名单 (direct.txt)
-        </a>
-        <a class="ops-btn" href="https://github.com/dare2live/rules-hub" target="_blank">
-          📦 浏览 GitHub 源码仓库
-        </a>
-      </div>
-    </div>
-
-    <!-- Client Copy Grid -->
-    <div class="section-title">📲 客户端一键托管与配置订阅</div>
-
-    <!-- Private Subscription Card（真正要用的是这个） -->
-    <div class="card" style="margin-bottom: 1.25rem; border-color: rgba(251, 191, 36, 0.45); background: linear-gradient(135deg, rgba(251,191,36,0.07), rgba(30,41,59,0.9));">
-      <div>
-        <div class="card-header">
-          <span class="card-icon">🔐</span>
-          <div class="card-title">私有订阅 · 含节点（手机上装的是这个）</div>
-        </div>
-        <p class="card-desc">
-          下面那些公开链接只有<strong>规则</strong>，节点是空的 —— 节点带明文口令，不能放在这台公开服务器上。
-          带节点的配置放在 Cloudflare Worker，路径首段是一串随机口令。
-          口令只存在<strong>你自己的浏览器本地</strong>，不上传、不进仓库。
-          <br>口令在 Mac 上跑 <code>python3 scripts/publish_private.py --show</code> 获取。
-        </p>
-        <div id="priv-setup" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-          <input id="priv-token" type="password" placeholder="粘贴分发口令（或整条订阅链接）"
-                 style="flex: 1; min-width: 240px; padding: 0.6rem 0.8rem; border-radius: 8px;
-                        border: 1px solid var(--card-border); background: var(--bg);
-                        color: var(--text-main); font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem;">
-          <button class="copy-btn" onclick="savePrivToken()">保存口令</button>
-        </div>
-        <div id="priv-links" style="display: none; flex-direction: column; gap: 8px;"></div>
-      </div>
-    </div>
-
-    <div class="grid">
-      <!-- Surge Card -->
-      <div class="card">
-        <div>
-          <div class="card-header">
-            <span class="card-icon">⚡️</span>
-            <div class="card-title">Surge 5 (Mac / iOS)</div>
-          </div>
-          <p class="card-desc">托管配置，含 <code>#!MANAGED-CONFIG</code> 自动同步标记，自带进程级与域名级双保险分流。<br><span style="color: var(--warning);">节点槽位是占位（<code>= direct</code>），日常请用上面的私有订阅。</span></p>
-        </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/surge/profile.conf')">
-          📋 复制 Surge 规则模板（不含节点）
-        </button>
-      </div>
-
-      <!-- QX Card -->
-      <div class="card">
-        <div>
-          <div class="card-header">
-            <span class="card-icon">🎯</span>
-            <div class="card-title">Quantumult X (iOS)</div>
-          </div>
-          <p class="card-desc">借鉴墨鱼规范模块化结构，自动转译 HOST 语法，自托管 16+ 核心去广告与 VIP 解锁重写。<br><span style="color: var(--warning);">这份 <code>[server_local]</code> 是空的，日常请用上面的私有订阅。</span></p>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button class="copy-btn" onclick="copyLink('{base_url}/qx/profile.conf')">
-            📋 复制 QX 规则模板（不含节点）
-          </button>
-          <button class="copy-btn" style="background: rgba(52, 211, 153, 0.15); border-color: var(--success); color: var(--success);" onclick="copyLink('{base_url}/qx/rewrite_remote.snippet')">
-            🛡️ 复制远程重写订阅集合
-          </button>
-          <button class="copy-btn" style="background: rgba(167, 139, 250, 0.15); border-color: var(--purple); color: var(--purple);" onclick="copyLink('{base_url}/qx/filter_remote.snippet')">
-            🌐 复制远程分流订阅集合
-          </button>
-          <button class="copy-btn" style="background: rgba(56, 189, 248, 0.15); border-color: var(--accent); color: var(--accent);" onclick="copyLink('{base_url}/qx/rewrites/all.conf')">
-            ⚡️ 复制 All-in-One 整合重写
-          </button>
-        </div>
-      </div>
-
-      <!-- Shadowrocket Card -->
-      <div class="card">
-        <div>
-          <div class="card-header">
-            <span class="card-icon">🚀</span>
-            <div class="card-title">Shadowrocket (iOS)</div>
-          </div>
-          <p class="card-desc">小火箭远程规则集订阅，完美兼容 Hysteria 2 与 Shadowsocks 多协议节点。</p>
-        </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/shadowrocket/claude.list')">
-          📋 复制小火箭规则集
-        </button>
-      </div>
-
-      <!-- Clash (mihomo) Card -->
-      <div class="card">
-        <div>
-          <div class="card-header">
-            <span class="card-icon">🐱</span>
-            <div class="card-title">Clash / mihomo (Apple 全平台)</div>
-          </div>
-          <p class="card-desc">rule-provider 远程规则集，适配 ProjectClash/Clash-Client（iOS / iPadOS / macOS / tvOS）。与 Surge、QX 同源同序。<br><span style="color: var(--warning);">这份是占位节点模板，日常请用上面的私有订阅。</span></p>
-        </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/clash/config.example.yaml')">
-          📋 复制 Clash 规则模板（不含节点）
-        </button>
-      </div>
-
-      <!-- Merlin Router Card -->
-      <div class="card">
-        <div>
-          <div class="card-header">
-            <span class="card-icon">📶</span>
-            <div class="card-title">梅林软路由 (Shadowsocks)</div>
-          </div>
-          <p class="card-desc">软路由 SS 插件黑白名单，Claude/GoogleAI 强制走代理，微信企微强制直连。</p>
-        </div>
-        <button class="copy-btn" onclick="copyLink('{base_url}/router/merlin_blacklist.txt')">
-          📋 复制软路由域名列表
-        </button>
-      </div>
-    </div>
-
-    <!-- Quantumult X Rewrites Section -->
-    <div class="section-title">
-      <span>🛡️ Quantumult X 自托管重写与 VIP 解锁列表</span>
-      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">每日 04:00 自动拉取上游保持最新 • 免翻墙高速分发</span>
-    </div>
-    <div style="margin-bottom: 2rem;">
-      {all_rewrites_html}
-    </div>
-
-    <!-- Rule Details Section -->
-    <div class="section-title">
-      <span>🔍 融合规则源明细与即时检索</span>
-      <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">已开启本地白名单免疫拦截防护</span>
-    </div>
-    <div style="margin-bottom: 2rem;">
-      {all_sources_html}
-    </div>
-
-    <!-- Routing Strategy Map -->
-    <div class="section-title">📊 核心业务策略组映射清单</div>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>业务 / 目标服务</th>
-            <th>策略组名称</th>
-            <th>物理走向</th>
-            <th>容灾与选路策略</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Claude 全生态</strong></td>
-            <td><code>Claude</code></td>
-            <td><span class="badge badge-sg">🇸🇬 新加坡专线</span></td>
-            <td>Lightsail HY2 优先，SS 备用自动容灾</td>
-          </tr>
-          <tr>
-            <td><strong>Gemini / Antigravity</strong></td>
-            <td><code>GoogleAI</code></td>
-            <td><span class="badge badge-us">🇺🇸 美区优选 / 新加坡</span></td>
-            <td>测速优选，坚决杜绝香港节点（防锁区）</td>
-          </tr>
-          <tr>
-            <td><strong>ChatGPT / Codex 全生态</strong></td>
-            <td><code>OpenAI</code></td>
-            <td><span class="badge badge-us">🇺🇸 美区优选</span></td>
-            <td>锁定美区出口，规避新加坡出口风控与降智</td>
-          </tr>
-          <tr>
-            <td><strong>腾讯 WorkBuddy AI</strong></td>
-            <td><code>WorkBuddy</code></td>
-            <td><span class="badge badge-sg">🇸🇬 新加坡 / 直连</span></td>
-            <td>EdgeOne 新加坡接入加速</td>
-          </tr>
-          <tr>
-            <td><strong>微信 / 企微 / 钉钉 / 国内银行</strong></td>
-            <td><code>DIRECT</code></td>
-            <td><span class="badge badge-direct">🇨🇳 国内直连</span></td>
-            <td>GeoIP CN + 专属域名白名单，零代理流量</td>
-          </tr>
-          <tr>
-            <td><strong>通用外网 (X / GitHub / 搜索)</strong></td>
-            <td><code>Proxy</code></td>
-            <td><span class="badge badge-sg">🇸🇬 新加坡 / 🇺🇸 美国</span></td>
-            <td>多节点动态优选与自由切换</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div id="toast" class="toast">✅ 链接已复制到剪贴板！</div>
-
-  <script>
-    function copyLink(url) {{
-      navigator.clipboard.writeText(url).then(() => {{
-        const toast = document.getElementById('toast');
-        toast.innerText = '✅ 链接已复制: ' + url;
-        toast.classList.add('show');
-        setTimeout(() => {{ toast.classList.remove('show'); }}, 2500);
-      }}).catch(err => {{
-        prompt("请手动复制链接:", url);
-      }});
-    }}
-
-    // ===== 私有订阅：口令只存 localStorage，不上传 =====
-    const PRIV_BASE = '{priv_base}';
-    const PRIV_KEY = 'rh_priv_token';
-
-    function privToken() {{
-      try {{ return localStorage.getItem(PRIV_KEY) || ''; }} catch (e) {{ return ''; }}
-    }}
-
-    function savePrivToken() {{
-      const raw = (document.getElementById('priv-token').value || '').trim();
-      if (!raw) {{ alert('口令不能为空'); return; }}
-      // 支持直接粘贴整条订阅链接，只取口令那一段
-      let v = raw;
-      const scheme = v.indexOf('://');
-      if (scheme >= 0) v = v.slice(scheme + 3);
-      const parts = v.split('/').filter(Boolean);
-      v = parts.length > 1 ? parts[1] : (parts[0] || '');
-      if (!v) {{ alert('没解析出口令，检查一下粘贴的内容'); return; }}
-      try {{ localStorage.setItem(PRIV_KEY, v); }} catch (e) {{ alert('浏览器不允许本地存储'); return; }}
-      document.getElementById('priv-token').value = '';
-      renderPriv();
-    }}
-
-    function clearPrivToken() {{
-      try {{ localStorage.removeItem(PRIV_KEY); }} catch (e) {{}}
-      renderPriv();
-    }}
-
-    function renderPriv() {{
-      const tok = privToken();
-      const setup = document.getElementById('priv-setup');
-      const box = document.getElementById('priv-links');
-      if (!tok) {{
-        setup.style.display = 'flex';
-        box.style.display = 'none';
-        box.innerHTML = '';
-        return;
-      }}
-      setup.style.display = 'none';
-      const items = [
-        ['🎯 Quantumult X', 'qx.conf', 'var(--accent)'],
-        ['🐱 Clash / mihomo', 'clash.yaml', 'var(--purple)'],
-        ['⚡️ Surge', 'surge.conf', 'var(--success)'],
-      ];
-      let out = '';
-      for (const it of items) {{
-        const url = PRIV_BASE + '/' + tok + '/' + it[1];
-        out += '<button class="copy-btn" style="background:' + it[2] + ';color:#0f172a;" data-url="' +
-               url + '">📋 复制 ' + it[0] + ' 订阅链接</button>';
-      }}
-      out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;">';
-      out += '<button class="copy-btn" style="flex:1;background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-open="' +
-             PRIV_BASE + '/' + tok + '/">🔗 打开链接清单页</button>';
-      out += '<button class="copy-btn" style="background:transparent;border:1px solid var(--card-border);color:var(--text-muted);" data-clear="1">清除口令</button>';
-      out += '</div>';
-      box.innerHTML = out;
-      box.querySelectorAll('button[data-url]').forEach(b => {{
-        b.onclick = () => copyLink(b.getAttribute('data-url'));
-      }});
-      const openBtn = box.querySelector('button[data-open]');
-      if (openBtn) openBtn.onclick = () => window.open(openBtn.getAttribute('data-open'), '_blank');
-      const clearBtn = box.querySelector('button[data-clear]');
-      if (clearBtn) clearBtn.onclick = () => clearPrivToken();
-      box.style.display = 'flex';
-    }}
-
-    renderPriv();
-  </script>
-</body>
-</html>
-"""
+    # 看板模板外置：改样式改结构请直接改 web/index.html，不要动 Python。
+    # 模板里只有 {{base_url}} {{build_time}} {{total_rules}}
+    # {{all_sources_html}} {{all_rewrites_html}} {{priv_base}} 六个占位符。
+    tpl = read_text(BASE_DIR / "web" / "index.html")
+    for _k, _v in (
+        ("base_url", base_url),
+        ("build_time", build_time),
+        ("total_rules", str(total_rules)),
+        ("all_sources_html", all_sources_html),
+        ("all_rewrites_html", all_rewrites_html),
+        ("priv_base", priv_base),
+    ):
+        tpl = tpl.replace("{{" + _k + "}}", _v)
+    html = tpl
     with open(WEB_DIST / "index.html", "w", encoding="utf-8") as f:
         f.write(html)
 
