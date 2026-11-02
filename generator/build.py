@@ -943,83 +943,86 @@ def mirror_inline_scripts(content, base_url, rw_id):
     return out, len(seen)
 
 
-def self_host_urls_in_block(block, base_url, tag):
-    """把任意配置段里引用的外部脚本镜像到自托管，返回 (新内容, 镜像数量)。
+# 自托管资源映射：{原始 URL: 自托管 URL}。
+# 由 build_qx_assets() 填充（按 config/qx.yaml 的 icons + assets 清单），
+# 本地和 CI 走同一份清单 —— 否则会出现「本地生成了、线上 404」。
+QX_ASSET_URLS = {}
 
-    和 mirror_inline_scripts 的区别：那个只处理重写文件里的 script-* 引用，
-    这个处理 `[general]` 的 resource_parser_url、`[task_local]` 的
-    event-interaction 等「配置本体的外部依赖」。
 
-    为什么也要管：这些段每次导入都会加载，指向 GitHub raw 时国内经常拉不到，
-    表现为「QX 里添加新资源失败」「流媒体解锁查询没反应」——
-    跟重写脚本拉不到是同一类问题，只是藏得更深。
+def build_qx_assets(config):
+    """把 config/qx.yaml 声明的图标与外部资源镜像到 dist/qx/scripts/。
+
+    单独一步、且**不依赖 user_qx_input.txt**，是刻意的：
+    CI 上没有那个文件（gitignore）。如果靠扫描个人配置来发现要镜像什么，
+    CI 会全部漏掉，生成出来的自托管链接在 GitHub Pages 上全是 404
+    —— 那比直接用上游链接还糟。列在 config 里，本地和 CI 产物必然一致。
     """
-    if not block:
-        return block, 0
+    base_url = config["meta"]["base_url"]
+    urls = [v for v in (CFG_QX.get("icons") or {}).values() if v]
+    urls += [v for v in (CFG_QX.get("assets") or {}).values() if v]
+
     SCRIPT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    out = block
-    seen = {}
-    failed = 0
-    for m in re.finditer(r"https?://[^\s,;'\"()]+", block):
-        url = m.group(0)
-        if "github" not in url or url.startswith(base_url):
+    dest_dir = QX_DIST / "scripts"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    ok = failed = 0
+    for url in urls:
+        if url in QX_ASSET_URLS:
             continue
-        # 只镜像文本类。图标等二进制走 fetch_raw + write_text 会被 utf-8 解码写坏，
-        # 需要二进制通道，暂时不动 —— 拉不到只是没图标，不影响功能。
-        # 文本类走缓存+HTML 校验，二进制（图标）单独走字节通道 ——
-        # 图标用 write_text 会被 utf-8 解码写坏，必须 write_bytes。
-        is_bin = url.split("?")[0].endswith((".png", ".jpg", ".jpeg", ".svg", ".webp"))
-        if not is_bin and not url.split("?")[0].endswith((".js", ".json", ".conf")):
-            continue
-        if url in seen:
-            out = out.replace(url, seen[url])
-            continue
+        is_bin = url.split("?")[0].lower().endswith((".png", ".jpg", ".jpeg", ".svg", ".webp"))
         name = _script_mirror_name(url)
         cache = SCRIPT_CACHE_DIR / name
-        if is_bin:
-            data = b""
-            if cache.exists() and time.time() - os.path.getmtime(cache) < 30 * 86400:
-                data = cache.read_bytes()
-            else:
-                got = fetch_bytes(url, timeout=10)
-                if got and not got.lstrip()[:16].lower().startswith((b"<html", b"<!doc")):
-                    data = got
-                    cache.parent.mkdir(parents=True, exist_ok=True)
-                    cache.write_bytes(data)
-                elif cache.exists():
-                    data = cache.read_bytes()
-            if not data:
-                failed += 1
-                continue
-            dest_dir = QX_DIST / "scripts"
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            (dest_dir / name).write_bytes(data)
-            seen[url] = f"{base_url}/qx/scripts/{name}"
-            out = out.replace(url, seen[url])
-            continue
-        text = ""
-        if cache.exists() and time.time() - os.path.getmtime(cache) < 7 * 86400:
-            text = read_text(cache)
+        payload = b""
+        if cache.exists() and time.time() - os.path.getmtime(cache) < 30 * 86400:
+            payload = cache.read_bytes()
         else:
-            got = fetch_raw(url, timeout=10)
-            if got and not is_html_payload(got):
-                text = got
-                write_text(cache, text)
-            elif cache.exists():
-                text = read_text(cache)
-        if not text:
+            if is_bin:
+                got = fetch_bytes(url, timeout=12)
+                if got and not got.lstrip()[:16].lower().startswith((b"<html", b"<!doc")):
+                    payload = got
+                    cache.write_bytes(payload)
+            else:
+                got = fetch_raw(url, timeout=12)
+                if got and not is_html_payload(got):
+                    payload = got.encode("utf-8")
+                    cache.write_bytes(payload)
+            if not payload and cache.exists():
+                payload = cache.read_bytes()
+        if not payload:
             failed += 1
+            print(f"   \u26a0\ufe0f  [Assets] \u955c\u50cf\u5931\u8d25\uff08\u4e0a\u6e38\u53ef\u80fd\u5df2\u5220\uff09: {url}")
             continue
-        dest_dir = QX_DIST / "scripts"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        write_text(dest_dir / name, text)
-        seen[url] = f"{base_url}/qx/scripts/{name}"
-        out = out.replace(url, seen[url])
+        (dest_dir / name).write_bytes(payload)
+        QX_ASSET_URLS[url] = f"{base_url}/qx/scripts/{name}"
+        ok += 1
+    # 就地换成自托管地址：这样后面所有读 icons 的地方（公开模板、个人配置）
+    # 拿到的都是我们自己的链接，不用在每个使用点再替换一次。
+    for _k, _v in (CFG_QX.get("icons") or {}).items():
+        if _v in QX_ASSET_URLS:
+            CFG_QX["icons"][_k] = QX_ASSET_URLS[_v]
+    print(f"   \U0001f517 [Assets] {ok} \u4e2a\u8d44\u6e90\u5df2\u81ea\u6258\u7ba1\u5230 dist/qx/scripts/\uff08\u5931\u8d25 {failed}\uff09")
     if failed:
-        print(f"   ⚠️  [QX] {tag}: {failed} 个外部依赖镜像失败，保留原地址")
-    elif seen:
-        print(f"   🔗 [QX] {tag}: {len(seen)} 个外部依赖已自托管")
-    return out, len(seen)
+        print("      \u2191 \u5931\u8d25\u7684\u4f1a\u4fdd\u7559\u539f\u5730\u5740\uff0c\u4e0d\u4f1a\u5199\u6210\u574f\u94fe\u63a5\uff1b\u8bf7\u6362\u4e00\u4e2a\u4ecd\u5728\u7ef4\u62a4\u7684\u4e0a\u6e38\u5730\u5740")
+    return QX_ASSET_URLS
+
+
+def self_host_urls_in_block(block, base_url, tag):
+    """把配置段里的外部资源地址替换成自托管地址，返回 (新内容, 替换数)。
+
+    只做替换、不自己下载 —— 下载统一由 build_qx_assets() 按 config/qx.yaml 的
+    清单做，这样本地和 CI 的产物才一致。
+    """
+    if not block or not QX_ASSET_URLS:
+        return block, 0
+    out = block
+    n = 0
+    for src, dst in QX_ASSET_URLS.items():
+        if src in out:
+            out = out.replace(src, dst)
+            n += 1
+    if n:
+        print(f"   \U0001f517 [QX] {tag}: {n} \u4e2a\u5916\u90e8\u4f9d\u8d56\u6539\u4e3a\u81ea\u6258\u7ba1")
+    return out, n
+
 
 
 def build_rewrites(config):
@@ -2355,6 +2358,9 @@ def main():
     
     print("🔨 Generating Quantumult X configurations and rulesets...")
     produced = build_rewrites(config)
+    # 图标与外部资源必须在 build_qx 之前镜像好：build_qx 与
+    # generate_personal_qx_config 都直接读 CFG_QX 的 icons。
+    build_qx_assets(config)
     build_qx(config, rule_data, produced)
     generate_personal_qx_config(config, produced)
     

@@ -9,6 +9,21 @@ name_map:
   Proxy: 全球加速
   Media: 国际媒体
 
+# ===== 需要自托管的外部资源 =====
+#
+# 为什么必须在这里列一份，而不是让构建时自动扫描：
+#   个人配置里的 resource_parser_url / task_local 脚本来自 user_qx_input.txt，
+#   而那个文件是 gitignore 的 —— CI 上根本没有它。如果靠扫描配置来发现要镜像什么，
+#   CI 就会漏掉这些，生成出来的自托管链接在 GitHub Pages 上全是 404
+#   （比直接用上游链接还糟）。列在这里，本地和 CI 走同一份清单，产物必然一致。
+#
+# 镜像产物落在 dist/qx/scripts/，对外地址 {base_url}/qx/scripts/<hash>-<原名>。
+assets:
+  # QX 资源解析器：在 QX 里「引用」新资源时会调用它，拉不到就添加失败
+  resource_parser: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Scripts/resource-parser.js
+  # 流媒体解锁查询（[task_local] 的 event-interaction）
+  streaming_ui_check: https://raw.githubusercontent.com/KOP-XIAO/QuantumultX/master/Scripts/streaming-ui-check.js
+
 # 策略组图标（img-url）。没有图标的组不加 img-url 参数，不影响功能。
 #
 # 注意：这些地址会在构建时被镜像到自托管（dist/qx/scripts/），所以填上游地址即可，
