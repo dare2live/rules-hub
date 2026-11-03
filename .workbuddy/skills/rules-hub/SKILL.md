@@ -428,6 +428,18 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   而 HTTP 代理抓不到 QUIC；而且不用改任何系统设置。
   如果已经在 Mac 上手动配过代理，恢复顺序：`networksetup -setwebproxystate "Wi-Fi" off`
   → 三个代理都关 → 确认 `scutil --proxy` 只剩 Surge 自己的 127.0.0.1:6152。
+- **抄社区规则前先解析它写的域名**（2026-11 FotMob）。GitHub 上搜到的
+  `FotMob-AdBlock.sgmodule` 看着很像样，但第一条 `DOMAIN-SUFFIX,ads.fotmob.com`
+  对应的子域**根本不存在**（`ads.` / `ad.` / `promo.` / `sponsor.` 全部无解析），
+  `#!author` 还写着 `YourName`、homepage 是 `github.com/YourName/...` ——
+  模板生成，没跑过。一条 `dig` 就能省掉一轮无效部署。
+  真正常用的是通用广告栈：FotMob 网页版 HTML 里直接
+  `preconnect` 到 `openads.adsrvr.org`（The Trade Desk）+ `googletag`（Ad Manager）。
+- **上游 Advertising.list 的覆盖是不均匀的**：`doubleclick.net` 有两条
+  （SUFFIX + KEYWORD），但 `adsrvr.org`、`adnxs.com`、`criteo.com`、
+  `rubiconproject.com`、`pubmatic.com`、`amazon-adsystem.com`、
+  `googletagservices.com` **一条都没有**。
+  「我装了去广告规则集」≠「主流广告交易平台都拦了」，要按域名逐个 grep 产物。
 - **同名订阅留着「已停用」条目没意义**。用户视角就是列表里多一条默认不选中的死条目。
   确认弃用就**连条目一起删**（在原地留一段 YAML 注释说明为什么删），
   别只设 `enabled: false` —— 那只是把垃圾藏起来。
