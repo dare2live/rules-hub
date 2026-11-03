@@ -508,9 +508,15 @@ rewrites:
     desc: "FT 中文网会员阅读"
 
   - id: "youpume"
-    name: "有谱么"
-    filename: "youpume.js"
-    upstream_url: "https://raw.githubusercontent.com/chxm1023/Rewrite/main/youpume.js"
+    name: "有谱么[本地维护]"
+    filename: "youpume.v2.js"
+    # 上游 chxm1023/Rewrite 的 youpume.js 停在 2025-01-10，只补
+    # level / isMember / adsDisabled / adsDisabledTill 四个字段；
+    # 社区另一版（Guding88，数据来自 @Baby）还带 ladder="member"。
+    # 这里取字段并集，并且只覆盖会员态、保留服务端返回的其余字段
+    # （整包伪造会丢真实数据），另外补了 try/catch 防止非 JSON 响应挂死请求。
+    # 改脚本内容必须换文件名 —— QX 按 URL 缓存脚本本体，同名改内容设备不重下。
+    local_file: "rewrites/local/youpume.v2.js"
     opt_parser: true
-    enabled: false
-    desc: "有谱么会员吉他谱"
+    enabled: true
+    desc: "有谱么会员（补 level / isMember / ladder）"
