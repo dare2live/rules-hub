@@ -419,6 +419,37 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   它目前还能用，是因为这类上游 `.conf` 自带 `hostname = ...` 行，QX 运行时会再解析一次 ——
   属于「靠客户端兜底，不是靠我们自己的配置」，换客户端或上游删掉那行就失效。
   **改完 MITM 相关必须拿产物 grep 域名确认**，别相信「规则写了就一定会解密」。
+- **本地维护的重写文件是「自引用」格式，MITM 必须自己写**（2026-11 FotMob 时确认）。
+  一个 `rewrites/local/xxx.js` 同时承担两个角色：既是 QX 订阅的资源，又是脚本本体。
+  写法是把区块包在 C 注释里，注释后面接 JS：
+
+  ```
+  /*****
+  说明...
+  [rewrite_local]
+  ^https?:\/\/api\.example\.com\/path url script-response-body https://.../xxx.js
+  [mitm]
+  hostname = api.example.com
+  *****/
+  (function(){ ... })();
+  ```
+
+  QX 的行解析器照样能从注释里认出 `[rewrite_local]` / `hostname`，JS 引擎看到的是注释。
+  **关键：`build.py` 的 `all_hostnames` 只从文本里的 `hostname =` 行收集，不从正则反推**
+  （`derive_mitm_hostnames` 只作用于上游 `.conf`）。所以本地维护的脚本
+  **不写 `hostname =` 就不会进 `[mitm]`，HTTPS 根本不解密，重写静默失效**。
+- **RevenueCat 类 App 的会员解锁有固定套路**（2026-11 FotMob 验证）。
+  很多 App 用 RevenueCat 管订阅，会员态只由 `api.revenuecat.com/v1/subscribers/<id>`
+  的两个字段决定：`subscriber.subscriptions[产品ID]` 与 `subscriber.entitlements[权益名]`。
+  补上这两块即可，不用碰 App 自己的接口（那通常是登录态 + 服务端同步，改了更容易崩）。
+  两个必须做的细节：
+  1. **同时挂 `script-request-header` 删掉 `x-revenuecat-etag`** —— 否则服务端回 304，
+     没有响应体，响应脚本无从下手。
+  2. **按 UA 过滤**：`api.revenuecat.com` 是全租户共用域名，不按
+     `/fotmob/i` 之类的 UA 判据过滤，会把其他 App 的订阅态一起改坏。
+  权益名若不确定，可同时注入几个常见别名（`FotMob+` / `plus` / `fotmob_plus`），
+  命中任意一个即可；`period_type` 要写 `normal`，写 `active` 反而会被当成未知状态。
+  代价要说清楚：**只能解开客户端判定的权益**，服务端校验的功能仍然不行。
 - **「防误杀豁免」会在构建期静默删掉广告子域**（2026-11 小蚁摄像机弹窗拦不住的根因）。
   `build.py` 里有一条 immunity 逻辑：reject 源中只要域名命中 `unbreak.txt` /
   `direct.txt` 的后缀，就直接 `continue` 丢掉。而 `direct.txt` 有 `qq.com`、`baidu.com`，
