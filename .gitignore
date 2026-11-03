@@ -42,3 +42,5 @@ rewrites/cached/
 
 # 审计历史快照（本地保留即可；基线入库用于跨天对比）
 data/audit/history/
+data/cache/
+data/cache/

@@ -191,24 +191,69 @@ def read_rule_file(rel_path):
     return lines
 
 
-def fetch_upstream(url, timeout=8):
-    """Safely fetch external rules from open-source repositories."""
-    try:
-        req = urllib.request.Request(
-            url, 
-            headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"}
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            content = response.read().decode("utf-8", errors="ignore")
+UPSTREAM_CACHE_DIR = DATA_DIR / "cache" / "upstream"
+
+# 抓取失败且没有缓存可用的来源 —— 这些是真的丢数据，构建结束要报错
+DEGRADED_SOURCES = []
+
+
+def _upstream_cache_path(url):
+    return UPSTREAM_CACHE_DIR / (hashlib.sha1(url.encode("utf-8")).hexdigest()[:16] + ".txt")
+
+
+def _read_upstream_cache(url):
+    p = _upstream_cache_path(url)
+    if not p.exists():
+        return None, None
+    age = (time.time() - p.stat().st_mtime) / 86400
+    lines = [ln.strip() for ln in p.read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
+    return lines, age
+
+
+def fetch_upstream(url, timeout=8, retries=2):
+    """抓上游规则；失败时回退到「上次成功的内容」，而不是悄悄退化成空。
+
+    为什么必须有这层缓存：
+      GitHub raw 在国内很不稳，实测同一台机器连续构建，会随机有一条超时。
+      原来的实现是「抓不到就只用本地 rules/*.txt」——构建照样成功、照样发布，
+      但 reject.list 会从 794 条掉到 12 条，媒体清单少 800 条，而且只有一个
+      ⚠️ 警告，不会让任何人停下来。等于用一次网络抖动，换一份残废配置上线。
+      现在：成功就落盘缓存，失败就复用上次成功的版本并报出缓存年龄。
+    """
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; RulesHubCompiler/1.0)"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                content = response.read().decode("utf-8", errors="ignore")
             lines = []
             for line in content.splitlines():
                 line = line.strip()
                 if line and not line.startswith("#") and not line.startswith(";"):
                     lines.append(line)
-            return lines
-    except Exception as e:
-        print(f"   ⚠️  [Warning] Upstream fetch failed for {url}: {e} (Continuing with local rules)")
-        return []
+            if lines:
+                try:
+                    UPSTREAM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    _upstream_cache_path(url).write_text("\n".join(lines) + "\n", encoding="utf-8")
+                except OSError:
+                    pass
+                return lines
+            last_err = ValueError("上游返回空内容")
+        except Exception as e:  # noqa: BLE001 - 网络异常种类很多，统一兜底
+            last_err = e
+        if attempt < retries:
+            time.sleep(1.5)
+
+    cached, age = _read_upstream_cache(url)
+    if cached:
+        print(f"   ⚠️  上游抓取失败（{last_err}），改用 {age:.1f} 天前的缓存: {url}")
+        return cached
+    print(f"   ⚠️  上游抓取失败且无缓存，该来源只剩本地规则: {url}")
+    DEGRADED_SOURCES.append(url)
+    return []
 
 
 REWRITE_UA = "Quantumult X/1.4.2 (iPhone; iOS 18.0)"
@@ -2452,6 +2497,15 @@ def main():
     print("🔨 Generating Web Admin dashboard for Cloudflare / GitHub Pages...")
     build_web_admin(config, rule_data)
     
+    if DEGRADED_SOURCES:
+        print("")
+        print(f"❌ 有 {len(DEGRADED_SOURCES)} 个上游既抓不到、也没有历史缓存：")
+        for u in DEGRADED_SOURCES:
+            print(f"   - {u}")
+        print("   继续发布会得到一份缺规则的配置（广告表、媒体表会大幅缩水），")
+        print("   所以这里直接失败。等网络恢复重跑，或确认这些源已废弃后从 config.yaml 移除。")
+        sys.exit(1)
+
     print("✅ [Rules Hub] Build completed successfully!")
 
 
