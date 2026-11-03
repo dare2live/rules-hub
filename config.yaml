@@ -266,65 +266,43 @@ rewrites:
     enabled: true
     desc: "喜马拉雅去弹窗、横幅及音频流广告"
 
-  - id: "amap_ads"
-    name: "高德地图净化[卸载重装]@ddgksf2013"
-    filename: "AmapAds.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/AmapAds.conf"
-    opt_parser: false
-    # 2026-11 停用：这个订阅把 8 个业务接口交给 830f361b-amap.js 做响应体改写，
-    # 而该脚本顶部无条件 JSON.parse($response.body) 且没有 try/catch。高德接口
-    # 只要返回非 JSON（protobuf / 空响应 / 网关错误页），脚本抛异常后拿不到
-    # $done，QX 请求挂死到超时 —— 表现为「我的页面加载不出」「首页网络不畅」
-    # 「发送车机失败」，且不报任何错。脚本停更于 2025-08-30，高德已改版。
-    # 替代方案见下面的 amap_safe（只拦纯广告请求，不碰响应体）。
-    enabled: false
-    desc: "高德地图首页及路线推荐广告净化（已停用：脚本无异常兜底会挂死请求，见上方注释）"
-
-  - id: "amap_safe"
-    name: "高德地图净化[安全版]"
-    filename: "AmapSafe.conf"
-    # 本地维护：只保留拦截后不影响任何功能的广告请求（reject 类），
-    # 不用脚本改写响应体，因此不存在「脚本抛异常 → 请求挂死」的风险。
-    # 去掉了上游里会误伤功能的几条：我的页面 cardList 过滤、首页信息流、
-    # 订单/车机 order_web、天气、以及 amdc 调度（改调度结果会让高德判链路失败）。
-    local_file: "rewrites/local/AmapSafe.conf"
+  - id: "amap_block"
+    name: "高德地图净化[本地维护]"
+    filename: "AmapBlock.conf"
+    # 单一订阅：合并了原来的「安全版」(纯 reject 拦广告请求) 和
+    # 「内容净化」(脚本改响应体删卡片) 两条，重写列表里只留一条。
+    # 上游 AmapAds.conf 彻底弃用 —— 它把 8 个业务接口交给 830f361b-amap.js 改写，
+    # 该脚本顶部无条件 JSON.parse($response.body) 且没有 try/catch，高德接口只要
+    # 返回非 JSON 就抛异常、拿不到 $done，QX 请求挂死到超时，表现为「页面加载不出」
+    # 「首页网络不畅」「发送车机失败」且不报任何错。连条目都不保留 ——
+    # 留着只会在重写列表里多一条默认不选中的死订阅。
+    local_file: "rewrites/local/AmapBlock.conf"
     opt_parser: false
     enabled: true
-    desc: "高德地图开屏广告与路线广告拦截（本地安全版，不改写响应体）"
+    desc: "拦截广告请求 + 按标题删除猜你喜欢 / 达人任务 / 好友动态"
 
   - id: "amap_clean_script"
     name: "高德内容净化脚本[本地维护]"
-    filename: "amap.cards.js"
-    # mirror_only：只把这个文件自托管出去，供下面的 AmapClean.conf 通过
-    # script-response-body 引用。它本身不是订阅条目 —— 自包含重写靠头部注释里的
-    # [rewrite_local] 声明块生效，本文件没有那个块（规则写在 AmapClean.conf 里），
-    # 挂成订阅就是一条解析器提取不到任何规则的无效条目。
+    filename: "amap.trim.js"
+    # mirror_only：只把脚本自托管出去，供 AmapBlock.conf 用 script-response-body
+    # 引用。它本身不是订阅条目 —— 自包含重写靠头部注释里的 [rewrite_local]
+    # 声明块生效，本文件没有那个块，挂成订阅就是提取不到规则的无效条目。
     # 注意：改脚本内容必须换文件名，QX 按 URL 缓存脚本本体，同名改内容设备不重下。
     mirror_only: true
-    local_file: "rewrites/local/amap.cards.js"
+    local_file: "rewrites/local/amap.trim.js"
     opt_parser: true
     enabled: true
     desc: "高德内容净化脚本（按标题关键字删除卡片，全程异常兜底）"
 
-  - id: "amap_clean"
-    name: "高德地图内容净化[本地维护]"
-    filename: "AmapClean.conf"
-    # 单独一个订阅：内容净化要改写响应体，风险等级和纯 reject 不一样。
-    # 出问题可以只关这一条，不用连带关掉广告拦截。
-    # 上游（停更于 2025-08-30）没有覆盖这几个模块：好友动态是 2026 年
-    # 扫街榜的新功能，达人任务来自高德达人计划，都比上游脚本新。
-    local_file: "rewrites/local/AmapClean.conf"
-    opt_parser: false
-    enabled: true
-    desc: "屏蔽高德首页与我的页的猜你喜欢 / 达人任务 / 好友动态"
-
-  - id: "applet_ads"
-    name: "微信小程序去广告@ddgksf2013"
-    filename: "Applet.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/Applet.conf"
-    opt_parser: false
-    enabled: true
-    desc: "微信小程序广告与激励广告净化"
+  # [已删除 2026-11] 微信小程序去广告@ddgksf2013
+  # 结论：无法接着开发，网络层方案对小程序广告无效 —— 这是平台机制不是规则问题。
+  #   1. 小程序开屏广告由微信客户端内核托管（wx.showSplashScreen 生命周期完全在
+  #      微信侧，开发者拿不到 DOM / 句柄，无法 destroy），网络层改不掉。
+  #   2. 该订阅停更于 2023-09-13，只 5 条规则，针对便利蜂 / 顺丰速运 / 掌上公交等
+  #      2023 年的特定小程序，hostname 是 *.top / *.xyz 野鸡域名，日常小程序
+  #      不可能命中 —— 所以表现为「默认选中但完全没效果」。
+  #   3. 作者自己也在文件头写明「无法去除小程序5s开屏广告，建议开启青少年模式」。
+  # 替代方案：微信 → 我 → 设置 → 青少年模式（屏蔽大部分小程序广告，代价是限制功能）。
 
   - id: "xiaohongshu_ads"
     name: "小红书净化+去水印@奶思"
@@ -359,13 +337,20 @@ rewrites:
     enabled: true
     desc: "Spotify 歌曲切歌、无杂音、音质解锁"
 
-  - id: "cuttlefish_vip"
-    name: "墨鱼专属VIP@ddgksf2013"
-    filename: "ForOwnUse.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/dev/master/ForOwnUse.conf"
-    opt_parser: false
-    enabled: true
-    desc: "多款小众精品 App VIP 功能解锁"
+  # [已删除 2026-11] 墨鱼专属VIP@ddgksf2013（ForOwnUse.conf）
+  # 结论：实际失效，且名不副实 —— 名字像「多款 App VIP」，实际只有 1 条规则。
+  #   1. 更新时间 2025-05-05（一年半前），全文 603 字节，仅解锁「财新周刊」一个 App。
+  #   2. 那条规则是 http://ipadcms.caixin.com/tmp/articles —— **明文 HTTP**。
+  #      iOS 的 ATS 默认强制 https，现代 App 不会发明文请求，这条规则命中不了。
+  #      （脚本 CaiXinZhouKanProCrack.js 还活着，但规则本身不会被触发。）
+  #   3. 财新的「开屏广告」已由 startup_ads 覆盖（hostname 里有 gg.caixin.com）。
+  #
+  # 保留 startup_ads（墨鱼去开屏 2.0）：更新于 2026-08-29，513 条规则、约 407 个
+  # App，活跃维护，是整个配置里覆盖面最广的订阅。它头部注释写「不含微博 / 闲鱼 /
+  # 喜马拉雅 / Youtube / 高德 / 小红书等」，但 hostname 里实际仍带着 api.weibo.cn、
+  # acs.m.goofish.com、api.xueqiu.com —— 注释和内容对不上，跟 weibo_ads /
+  # goofish_ads 有冗余。不过一个只拦开屏、一个做深度净化，是重复不是冲突，
+  # 不值得为它拆分成几百个订阅。
 
   - id: "bodian_music"
     name: "波点音乐"
@@ -415,13 +400,8 @@ rewrites:
     desc: "MissAV 网页去广告与弹窗拦截（本地维护，2026-10 实测广告位）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
-  - id: "caiyun_ads"
-    name: "彩云天气净化@ddgksf2013"
-    filename: "CaiYunAds.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/CaiYunAds.conf"
-    opt_parser: false
-    enabled: false
-    desc: "彩云天气广告拦截"
+  # [已删除 2026-11] 彩云天气净化@ddgksf2013 —— 不用彩云天气，且它属于
+  # 墨鱼去开屏文件头明说「无法 MITM」的那批应用（彩云天气[会员]），规则本就无效。
 
   - id: "netease_ads"
     name: "网易云净化@ddgksf2013"
@@ -455,21 +435,10 @@ rewrites:
     enabled: false
     desc: "Google 地区重定向修复"
 
-  - id: "unblock_wechat_url"
-    name: "微信解锁被屏蔽的URL@zZPiglet"
-    filename: "UnblockURLinWeChat.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Function/UnblockURLinWeChat.conf"
-    opt_parser: false
-    enabled: false
-    desc: "微信内置浏览器解锁被封链接"
+  # [已删除 2026-11] 微信解锁被屏蔽的URL@zZPiglet —— 用不上，默认关闭的死条目。
 
-  - id: "boxjs_rewrite"
-    name: "BoxJS商店版@chavyleung"
-    filename: "boxjs.rewrite.quanx.conf"
-    upstream_url: "https://raw.githubusercontent.com/chavyleung/scripts/master/box/rewrite/boxjs.rewrite.quanx.conf"
-    opt_parser: false
-    enabled: false
-    desc: "BoxJS 本地 Web 控制台与订阅商店"
+  # [已删除 2026-11] BoxJS商店版@chavyleung —— 没装 BoxJS，默认关闭的死条目。
+  # （BoxJS 是给「脚本型重写」用的 Web 配置台，本项目没有依赖它的脚本。）
 
   - id: "kyxq"
     name: "口语星球"
