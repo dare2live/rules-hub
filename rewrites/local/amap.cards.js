@@ -1,18 +1,23 @@
 /***********************************************
-> 应用名称：高德地图内容净化（本地维护）
-> 作用：屏蔽首页与「我的」页的信息流 / 社区卡片
->       猜你喜欢、达人任务、好友动态
-> 更新时间：2026-11-02
-> 设计原则：黑名单删除 + 全程异常兜底
+> 应用名称：高德地图内容净化（本地维护 v2）
+> 作用：屏蔽「我的」页与首页的社区 / 推荐卡片
+>       猜你喜欢、达人任务、好友动态、热门活动
+> 更新时间：2026-11-03
+> 设计原则：黑名单删除 + 全程异常兜底 + 容器类型自适应
+
+v2 修的两个致命问题（v1 完全失效的原因）：
+  1. cardList 是「对象」不是数组。上游脚本用的是
+     Object.values(obj.data.cardList).filter(...)，
+     v1 只判断 Array.isArray 并调 splice，所以一次都没进去过。
+  2. 图片海报位（首页海报墙）响应里没有文字，按标题关键字永远匹配不到。
+     那类走 AmapSafe.conf 的 reject 拦请求，不靠本脚本。
 ***********************************************/
 
-// 上游 830f361b-amap.js 的「我的页面」用的是白名单保留（只留 MyOrderCard /
-// FrequentLocation 两种 dataType），高德一改字段名就把整页清空 —— 这正是之前
-// 「我的页面加载不出」的原因之一。
-// 这里反过来做：只按标题文本做黑名单删除。匹配不上就保持原样，最坏是没效果，
-// 绝不会把整页清成空白，也不会因为字段缺失而挂住请求。
-
-var KEYWORDS = ['猜你喜欢', '达人任务', '好友动态'];
+var KEYWORDS = [
+  '猜你喜欢', '达人任务', '好友动态',
+  '热门活动', '扫街榜', '周边精选',
+  '为你推荐', '大家都在看'
+];
 // 太长的字符串通常是正文/描述，不做匹配，避免误删正常内容
 var MAX_TEXT_LEN = 60;
 
@@ -36,8 +41,11 @@ function amapHit(obj) {
 
 var amapRemoved = 0;
 
+// 数组用 splice 反向删；普通对象用 delete 删键。
+// v1 只处理了数组，而高德的 cardList 是 {key: card} 形式的对象。
 function amapClean(node) {
   if (node === null || typeof node !== 'object') return;
+
   if (Object.prototype.toString.call(node) === '[object Array]') {
     for (var i = node.length - 1; i >= 0; i--) {
       if (amapHit(node[i])) {
@@ -49,8 +57,19 @@ function amapClean(node) {
     }
     return;
   }
+
+  // 先收集再删：不要在遍历过程中改正在遍历的对象
+  var del = [];
   for (var k in node) {
-    amapClean(node[k]);
+    if (amapHit(node[k])) del.push(k);
+  }
+  for (var j = 0; j < del.length; j++) {
+    delete node[del[j]];
+    amapRemoved++;
+  }
+  // 剩下的继续下钻（卡片内部可能还有嵌套列表）
+  for (var k2 in node) {
+    amapClean(node[k2]);
   }
 }
 

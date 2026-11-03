@@ -294,13 +294,14 @@ rewrites:
 
   - id: "amap_clean_script"
     name: "高德内容净化脚本[本地维护]"
-    filename: "amap.clean.js"
+    filename: "amap.cards.js"
     # mirror_only：只把这个文件自托管出去，供下面的 AmapClean.conf 通过
-    # script-response-body 引用。它本身不是订阅条目 —— 一旦进 [rewrite_remote]，
-    # QX 会按 opt-parser=true 把它当全局脚本跑在所有请求上，命中关键字就去改
-    # 任意站点的响应体，还会拖慢全部流量。
+    # script-response-body 引用。它本身不是订阅条目 —— 自包含重写靠头部注释里的
+    # [rewrite_local] 声明块生效，本文件没有那个块（规则写在 AmapClean.conf 里），
+    # 挂成订阅就是一条解析器提取不到任何规则的无效条目。
+    # 注意：改脚本内容必须换文件名，QX 按 URL 缓存脚本本体，同名改内容设备不重下。
     mirror_only: true
-    local_file: "rewrites/local/amap.clean.js"
+    local_file: "rewrites/local/amap.cards.js"
     opt_parser: true
     enabled: true
     desc: "高德内容净化脚本（按标题关键字删除卡片，全程异常兜底）"
