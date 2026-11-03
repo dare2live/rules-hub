@@ -1,0 +1,33 @@
+# 国际程序化广告交易平台（SSP / 竞价 / 验证）
+#
+# 来源：2026-11-03 研究 FotMob 时，从 fotmob.com 网页版 HTML 里抓到
+#   <link rel="preconnect" href="https://openads-cdn.adsrvr.org">
+#   <link rel="preconnect" href="https://openads.adsrvr.org">
+# 加上页面里的 googletag（Google Ad Manager）。
+# 这些平台只做广告竞价与投放，不承载任何 App 功能，拦掉只影响广告。
+#
+# 为什么不并进 rules/reject.txt：
+#   reject 是上游 blackmatrix7 的 Advertising.list，本地追加的内容会跟着上游
+#   一起被 immunity 过滤（命中 direct.txt 后缀就删）。这批虽然是国外域名、
+#   不会被 qq.com/baidu.com 命中，但放在独立文件里更容易核对和回滚。
+#
+# 已知代价：极少数 App 的「看广告换权益」会失效（拿不到广告就发不了奖励）。
+
+# The Trade Desk（FotMob 网页版实测在用）
+DOMAIN-SUFFIX,adsrvr.org
+
+# Google Ad Manager 脚本（doubleclick 已在上游 reject 里，这里补脚本域名）
+DOMAIN-SUFFIX,googletagservices.com
+
+# 主流广告交易平台
+DOMAIN-SUFFIX,adnxs.com
+DOMAIN-SUFFIX,criteo.com
+DOMAIN-SUFFIX,criteo.net
+DOMAIN-SUFFIX,rubiconproject.com
+DOMAIN-SUFFIX,pubmatic.com
+DOMAIN-SUFFIX,amazon-adsystem.com
+DOMAIN-SUFFIX,smartadserver.com
+DOMAIN-SUFFIX,teads.tv
+
+# 广告可见性验证
+DOMAIN-SUFFIX,moatads.com

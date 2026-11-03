@@ -178,6 +178,13 @@ rule_sources:
     skip_immunity: true
     desc: "国产广告联盟 / 广告 SDK / 监测（小蚁摄像机实测，排在业务直连之前才生效）"
 
+  # 国际程序化广告平台。FotMob 网页版实测用 The Trade Desk（openads.adsrvr.org）
+  # + Google Ad Manager；其中 doubleclick 上游已拦，adsrvr 一条都没有。
+  - id: "adblock_intl"
+    target: "REJECT"
+    file: "rules/adblock-intl.txt"
+    desc: "国际广告交易平台（The Trade Desk / Xandr / Criteo / Ad Manager）"
+
   - id: "claude"
     target: "Claude"
     file: "rules/claude.txt"
