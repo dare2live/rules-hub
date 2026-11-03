@@ -22,6 +22,7 @@ bash scripts/update_qx.sh             # iOS 的 QX：生成→推 KV→判断要
 ./scripts/sync.sh                     # 只重新生成 + 推私有侧（上面两个脚本的底层）
 python3 scripts/publish_private.py --show    # 忘了口令
 python3 scripts/publish_private.py --rotate  # 口令泄露
+/usr/bin/python3 scripts/upstream_audit.py   # P0 上游健康审计（只读）：写 data/audit + docs/UPSTREAM_AUDIT_*.md
 cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了本文件必须同步，否则下次会话加载不到
 ```
 
@@ -222,6 +223,13 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   也复现过）。排查代码一律用 Grep 工具，不要用 `grep ... | head`。
 - 测试点选择：Mac 跑独立代理客户端（utun + Fake-IP）时，其流量不经过路由器分流，
   不能当路由器侧的验证点。验证路由器行为要用手机连 WiFi。
+- **上游审计看四个状态**：正常 / HTML / 空内容 / 失败。`停更` 只是声明时间超过 180 天，
+  不等于失效 —— 域名类清单（Claude、OpenAI）可能真的稳定，重写类才要重点看。
+- **审计只读**：`scripts/upstream_audit.py` 不写 `dist/`、不改 `config.yaml`。
+  报告在 `docs/UPSTREAM_AUDIT_*.md`，基线在 `data/audit/baseline.json`；
+  只有 `change=changed` 才值得去看 diff，`new` 只代表第一次见。
+- **墨鱼站点偶发 TLS/读超时**：审计会重试一次并放宽到 40s。连续 2 天失败才算上游挂了，
+  单次失败先看 `last_good_at`，不要急着换源。
 
 ## 每次改动后必查的清单
 

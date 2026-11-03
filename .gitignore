@@ -39,3 +39,6 @@ config/local.surge.yaml
 
 # 构建期缓存：镜像下来的第三方脚本与图标，不入库
 rewrites/cached/
+
+# 审计历史快照（本地保留即可；基线入库用于跨天对比）
+data/audit/history/

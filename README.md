@@ -51,6 +51,7 @@ rules-hub/
 ├── scripts/update_qx.sh         # 一条命令：更新 iOS 的 QX（含「要不要手动导入」判定）
 ├── scripts/publish_private.py   # 个人配置 + 节点订阅 → Cloudflare KV
 ├── scripts/sync.sh              # 重新生成 + 推送私有侧（update_qx.sh 的底层）
+├── scripts/upstream_audit.py    # 上游健康审计（只读）：新鲜度/哈希/规则数 → docs/UPSTREAM_AUDIT_*.md
 ├── .github/workflows/deploy.yml # CI：构建 → GitHub Pages + gh-pages 镜像
 └── dist/                        # 编译产物（不入库）
 ```
@@ -241,7 +242,14 @@ bash scripts/update_qx.sh
 
 python3 scripts/publish_private.py --show     # 忘了口令就用这个
 python3 scripts/publish_private.py --rotate   # 口令泄露了就换一个
+
+# 上游健康审计（只读，不改产物）：哪些源变了、变慢了、变成 HTML 了
+/usr/bin/python3 scripts/upstream_audit.py
 ```
+
+> 审计结果在 `docs/UPSTREAM_AUDIT_YYYY-MM-DD.md`，基线在 `data/audit/baseline.json`。
+> CI 每天构建后自动跑一次，报告会进 Actions Summary；历史快照只留在本地
+> （`data/audit/history/` 已 gitignore），不入库。
 
 > **这就是「机场模式」**：设备只认一个订阅地址，之后所有变更都在服务端完成，
 > 客户端点一下更新就同步了，不需要再传文件。
