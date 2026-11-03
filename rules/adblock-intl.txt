@@ -31,3 +31,43 @@ DOMAIN-SUFFIX,teads.tv
 
 # 广告可见性验证
 DOMAIN-SUFFIX,moatads.com
+
+# ===== FotMob iOS 抓包实测（2026-11-03 20:57-20:59）=====
+#
+# FotMob 用的是 header bidding（Prebid）：每个广告位会同时向十几家 SSP 发竞价
+# 请求，谁出价高谁填充。**少拦一家就少一个填充来源**，所以按抓包结果整组收录，
+# 不要只挑眼熟的拦。
+#
+# 判断依据是请求路径而不是 whois（这些域名的注册信息大多 REDACTED）：
+#   prebid.* / *-bidder / hb* / exchange.* / *.ssp.*  → 竞价
+#   sync.* / *-identity / census-*                    → 用户 ID 同步与统计
+#   targeting.* / *.pub.*                             → 定向与广告位
+DOMAIN-SUFFIX,tappx.com
+DOMAIN-SUFFIX,a-mo.net
+DOMAIN-SUFFIX,onetag-sys.com
+DOMAIN-SUFFIX,2mdn.net
+DOMAIN-SUFFIX,bqstreamer.com
+DOMAIN-SUFFIX,voltaxam.com
+DOMAIN-SUFFIX,privacymanager.io
+DOMAIN-SUFFIX,unruly.media
+DOMAIN-SUFFIX,seedtag.com
+DOMAIN-SUFFIX,richaudience.com
+DOMAIN-SUFFIX,media.net
+DOMAIN-SUFFIX,kueezrtb.com
+DOMAIN-SUFFIX,postrelease.com
+DOMAIN-SUFFIX,inner-active.mobi
+DOMAIN-SUFFIX,scorecardresearch.com
+DOMAIN-SUFFIX,sparteo.com
+DOMAIN-SUFFIX,hadronid.net
+DOMAIN-SUFFIX,ttdcdn.org
+DOMAIN-SUFFIX,minutemedia-prebid.com
+
+# 明确不拦（记在这里，下次不用重新判断一遍）：
+#   api.revenuecat.com                          FotMob+ 订阅管理，拦了内购异常
+#   firebaseremoteconfigrealtime.googleapis.com App 远程配置
+#   firebase-settings.crashlytics.com           崩溃上报
+#   fundingchoicesmessages.google.com           Google 同意弹窗，拦了可能让广告直接加载
+#   images.fotmob.com / latest.fotmob.com       App 自己的图片与数据
+#   talksport.com / e1.365dm.com / ichef.bbci.co.uk  新闻正文与配图
+#   theanalyst.com                              Opta 数据（内容合作方）
+
