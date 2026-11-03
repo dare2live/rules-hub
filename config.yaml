@@ -74,23 +74,28 @@ policies:
 
   - name: "WorkBuddy"
     type: "select"
-    desc: "腾讯 WorkBuddy AI 加速通道（境外侧，走新加坡）"
-    # QX 侧默认选中项（成员列表第一个）
+    desc: "腾讯 WorkBuddy 境外侧（.ai / .cc / .link），默认直连"
+    # 默认直连，不是走新加坡。
     #
-    # 这里不能写 proxy：QX 的 proxy 是「跟随当前全局选中的节点」。
-    # 全局节点平时多半锁在美国（ChatGPT / Gemini 用），
-    # WorkBuddy 的接口在腾讯云新加坡，绕美国一圈会多出 200~400ms RTT，
-    # 表现出来就是「客户端能开但慢得离谱」。直接钉死新加坡节点。
-    qx_default: "Lightsail Singapore"
-    default_select: "🇸🇬 新加坡自动备用"
+    # 2026-11-03 实测结论（先 Mac 取证，再手机 A/B）：
+    #   · Mac 上大陆版客户端近 200 条请求里 **0 条** .ai，
+    #     只连 www.workbuddy.cn / static.workbuddy.cn / galileotelemetry.tencent.com，
+    #     全部命中 WorkBuddyCN → DIRECT，DNS 由 doh.pub / alidns 解到国内 IP。
+    #   · 手机上把这一组切到 direct，海外版立刻变快。
+    # 原因：workbuddy.ai 的 CNAME 是 *.eo.dnse2.com（腾讯 EdgeOne），
+    # 本身就是按来源做就近调度的；绕新加坡等于把就近调度废掉，
+    # 还多一跳回国。所以这里直连最快。
+    #
+    # 保留「🇸🇬 新加坡自动备用 / Lightsail Singapore」两个成员：
+    # 哪天 EdgeOne 调度出问题，在 QX 里手切一下就能验证，不用重新导入。
+    qx_default: "DIRECT"
+    default_select: "DIRECT"
     proxies:
+      - "DIRECT"
       - "🇸🇬 新加坡自动备用"
-      # QX 里没有 fallback 组（那是 Surge 的写法），必须直接列出节点，
-      # 否则 WorkBuddy 组只剩「全球加速 / direct / proxy」三个成员，
-      # qx_default 找不到目标就被静默忽略，最后又退回跟随全局节点。
+      # QX 里没有 fallback 组（那是 Surge 的写法），要能手切就必须直接列出节点
       - "Lightsail Singapore"
       - "Proxy"
-      - "DIRECT"
 
   - name: "Proxy"
     type: "select"
