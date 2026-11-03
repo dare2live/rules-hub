@@ -429,22 +429,6 @@ rewrites:
     enabled: false
     desc: "网易云音乐净化"
 
-  - id: "q_search"
-    name: "Safari超级搜索@ddgksf2013"
-    filename: "Q-Search.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/Q-Search.conf"
-    opt_parser: false
-    enabled: false
-    desc: "Safari 快速搜索引擎切换"
-
-  - id: "douban_movie"
-    name: "豆瓣网页观影快捷跳转@ddgksf2013"
-    filename: "Douban.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/Douban.conf"
-    opt_parser: false
-    enabled: false
-    desc: "豆瓣网页观影快捷跳转"
-
   - id: "general_redirect"
     name: "Google重定向@DivineEngine"
     filename: "General.conf"
