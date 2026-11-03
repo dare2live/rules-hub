@@ -34,8 +34,9 @@ assets:
 icons:
   Claude: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Bot.png
   GoogleAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Google.png
+  # 策略组名跟腾讯产品名一致：WorkBuddy = 国内版，WorkBuddy AI = 海外版
   WorkBuddy: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/WeChat.png
-  WorkBuddyCN: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/WeChat.png
+  WorkBuddy AI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/WeChat.png
   OpenAI: https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/ChatGPT.png
   全球加速: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Global.png
   国际媒体: https://raw.githubusercontent.com/Orz-3/mini/master/Color/Streaming.png
@@ -50,15 +51,15 @@ policy_order:
   - Claude
   - GoogleAI
   - OpenAI
-  - WorkBuddyCN
   - WorkBuddy
+  - WorkBuddy AI
 
 # 规则集 id -> QX 侧 tag 名
 tag_map:
   unbreak: 规则修正
   custom_direct: 个人直连
-  workbuddy_cn: WorkBuddyCN
-  workbuddy: WorkBuddy
+  workbuddy_cn: WorkBuddy
+  workbuddy: WorkBuddy AI
   claude: Claude
   google_ai: GoogleAI
   media: 国际媒体

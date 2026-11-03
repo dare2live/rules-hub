@@ -96,8 +96,8 @@ rules-hub/
 | `Claude` | Claude / Anthropic，默认锁定新加坡 |
 | `GoogleAI` | Gemini / Antigravity / Cloud Code |
 | `OpenAI` | ChatGPT / Codex |
-| `WorkBuddyCN` | WorkBuddy 国版（`.cn` / 腾讯域），**默认直连** |
-| `WorkBuddy` | WorkBuddy 海外版，走新加坡 |
+| `WorkBuddy` | WorkBuddy 国内版（`.cn` / 腾讯域），**默认直连** |
+| `WorkBuddy AI` | WorkBuddy AI 海外版（`.ai` / `.cc` / `.link`），**默认直连** |
 | `Proxy`（QX 中为「全球加速」） | 通用海外流量 |
 | `Media`（QX 中为「国际媒体」） | 流媒体 |
 | `REJECT` | 广告拦截 |
@@ -105,14 +105,17 @@ rules-hub/
 QX 的策略组由 `config.yaml` 派生，并按 `server_local` 中**真实存在的节点标签**过滤，不会引用不存在的节点导致导入失败。
 
 每个组末尾都补了内置 `proxy` 与 `direct`，**默认选中项**由 `config.yaml` 的 `qx_default` 指定
-（Claude → `Lightsail Singapore`，WorkBuddyCN → `DIRECT`，其余 → `proxy`）。
+（Claude → `Lightsail Singapore`，`WorkBuddy` / `WorkBuddy AI` → `DIRECT`，其余 → `proxy`）。
 不补这两项的话，更新配置后想临时把某个组切成直连，客户端里根本没有这个选项，
 只能回来改配置重新生成 —— 这就是「每次更新都得手工调整」的来源。
 
-> **Mac 上区分不了两个 WorkBuddy 客户端**：两个 app 的可执行文件都叫 `Electron`，
-> 域名集合完全一致，Surge 只支持 `PROCESS-NAME` 不支持 `PROCESS-PATH`，所以进程层无法区分。
-> 现在的做法是按**域名**拆 `workbuddy-cn.txt` / `workbuddy.txt`，两者域名完全不相交，够用。
-> iOS 上是一个客户端、同一套后端，登录身份在 TLS 里，代理层看不到 —— 无法区分。
+> **WorkBuddy 国内版和海外版怎么分**：不是靠进程名，而是靠**域名**——这一点是 App 自己定好的。
+> 服务端在登录后下发 `isOversea` / `endpoint`，客户端据此把 baseUrl 切成
+> `www.workbuddy.cn`（国内账号）或 `www.workbuddy.ai`（海外账号），
+> 登录方式也不同：国内走企微 / 腾讯云账号，海外走 Google / GitHub / X / OneID 邮箱。
+> iOS 上虽然是**同一个 App**，按账号切域名，所以「按域名分流」天然等于「按账号分流」，
+> 换账号后设备端规则自动跟上，不用改配置。
+> 反过来做不到的：按请求头 / URL 路径区分需要 MITM 解密，App 一做证书校验就会挂。
 
 ---
 

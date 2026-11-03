@@ -62,9 +62,13 @@ policies:
       - "Google Oregon"
       - "🇸🇬 新加坡自动备用"
 
-  - name: "WorkBuddyCN"
+  # 策略组名与腾讯侧产品名保持一致：
+  #   WorkBuddy     = 国内版（workbuddy.cn，腾讯云国内账号 / 企微登录）
+  #   WorkBuddy AI  = 海外版（workbuddy.ai，Google / GitHub / X / OneID 邮箱登录）
+  # iOS 上是同一个 App，按登录账号切换后端域名，所以「按域名分流」就是「按账号分流」。
+  - name: "WorkBuddy"
     type: "select"
-    desc: "WorkBuddy 国内服务（workbuddy.cn / codebuddy.cn / copilot.tencent.com），默认直连"
+    desc: "WorkBuddy 国内版（workbuddy.cn / codebuddy.cn / copilot.tencent.com），默认直连"
     # QX 侧默认选中项（成员列表第一个）
     qx_default: "DIRECT"
     default_select: "DIRECT"
@@ -72,15 +76,15 @@ policies:
       - "DIRECT"
       - "🇸🇬 新加坡自动备用"
 
-  - name: "WorkBuddy"
+  - name: "WorkBuddy AI"
     type: "select"
-    desc: "腾讯 WorkBuddy 境外侧（.ai / .cc / .link），默认直连"
+    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），默认直连"
     # 默认直连，不是走新加坡。
     #
     # 2026-11-03 实测结论（先 Mac 取证，再手机 A/B）：
-    #   · Mac 上大陆版客户端近 200 条请求里 **0 条** .ai，
+    #   · Mac 上国内版客户端近 200 条请求里 **0 条** .ai，
     #     只连 www.workbuddy.cn / static.workbuddy.cn / galileotelemetry.tencent.com，
-    #     全部命中 WorkBuddyCN → DIRECT，DNS 由 doh.pub / alidns 解到国内 IP。
+    #     全部命中 WorkBuddy → DIRECT，DNS 由 doh.pub / alidns 解到国内 IP。
     #   · 手机上把这一组切到 direct，海外版立刻变快。
     # 原因：workbuddy.ai 的 CNAME 是 *.eo.dnse2.com（腾讯 EdgeOne），
     # 本身就是按来源做就近调度的；绕新加坡等于把就近调度废掉，
@@ -179,22 +183,22 @@ rule_sources:
     upstream_urls:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Gemini/Gemini.list"
 
-  # 两个客户端（国版 WorkBuddy / 海外版 WorkBuddy AI）共用同一套后端，
-  # app.asar 里的域名集合 553 条零差异，进程名都是 Electron —— 分不出身份。
-  # 所以按「域名归属」拆：国内域名走 WorkBuddyCN（直连），境外域名走 WorkBuddy（新加坡）。
-  # 这一条必须排在 workbuddy 之前，否则国内域名会被后面的 KEYWORD 兜底送进代理。
+  # iOS 上是同一个 App：登录国内账号就发往 workbuddy.cn，登录海外账号就发往
+  # workbuddy.ai（服务端登录后下发 isOversea / endpoint，客户端据此切 baseUrl）。
+  # 所以「按域名分流」= 「按账号分流」，切换账号后设备端规则自动跟上。
+  # 这一条必须排在 workbuddy 之前，否则国内域名会被后面的 KEYWORD 兜底带走。
   - id: "workbuddy_cn"
-    target: "WorkBuddyCN"
+    target: "WorkBuddy"
     file: "rules/workbuddy-cn.txt"
-    desc: "WorkBuddy / CodeBuddy 国内服务（腾讯云北京、广州），直连"
+    desc: "WorkBuddy 国内版（腾讯云北京、广州），直连"
 
   - id: "workbuddy"
-    target: "WorkBuddy"
+    target: "WorkBuddy AI"
     file: "rules/workbuddy.txt"
-    desc: "WorkBuddy / CodeBuddy 境外侧，走新加坡"
+    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），默认直连"
     # macOS 上两个客户端的可执行文件都叫 Electron，PROCESS-NAME 永远匹配不上，
     # 写进 Surge 就是死规则，所以限定只在 QX 侧输出（iOS 进程名是有效的）。
-    # Mac 上两者靠域名区分：见 workbuddy_cn（.cn 直连）与本条（.ai 走新加坡）。
+    # Mac 上两者靠域名区分：见 workbuddy_cn（.cn 直连）与本条（.ai，默认也直连）。
     process_platforms: ["qx"]
     process:
       - "WorkBuddy AI"

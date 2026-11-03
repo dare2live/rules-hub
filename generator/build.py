@@ -1233,7 +1233,7 @@ def build_qx_inline_direct_rules():
       filter_local 的优先级高于所有 filter_remote，而 direct.txt 里有一批
       大范围后缀（tencent.com / myqcloud.com / qcloud.com）。把它们内联进来，
       等于让「通用直连」压过「业务分组」：
-        · copilot.tencent.com 先被 tencent.com 吃掉 → WorkBuddyCN 组形同虚设；
+        · copilot.tencent.com 先被 tencent.com 吃掉 → WorkBuddy（国内版）组形同虚设；
         · cos.ap-singapore.myqcloud.com 先被 myqcloud.com 吃掉 →
           海外版资源桶被强制直连，workbuddy.list 里那条规则永远不生效。
       direct.txt 现在作为远程资源 custom_direct 排在业务列表之后，
@@ -1393,8 +1393,8 @@ def generate_personal_qx_config(config, produced=None):
     p.append(f"# 规则与重写自托管: {base_url}")
     p.append(f"# 节点: {', '.join(node_tags) if node_tags else '(未检测到 server_local 节点)'}")
     p.append(f"# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
-    p.append("# 本次关键修复: 业务规则（WorkBuddyCN / WorkBuddy 等）不再被内联直连规则压掉；")
-    p.append("#               geoip 兜底移到 filter_remote 最后一条；WorkBuddy 默认钉在新加坡节点")
+    p.append("# 本次关键修复: 业务规则（WorkBuddy / WorkBuddy AI）不再被内联直连规则压掉；")
+    p.append("#               geoip 兜底移到 filter_remote 最后一条；WorkBuddy AI 默认直连")
     p.append("")
 
     p.append("[general]")
@@ -1428,7 +1428,7 @@ def generate_personal_qx_config(config, produced=None):
     p.append("# 关键：BYD / DiLink 等「国内域名 + 境外 IP」的服务必须在这里直连，")
     p.append("#       否则订阅拉取失败或域名解析出境外 IP 时，会被 final 送进代理。")
     p.append("# 注意：普通国内站点不内联。内联规则会压过 filter_remote 里的业务分组，")
-    p.append("#       比如 tencent.com 会把 copilot.tencent.com 吃掉，WorkBuddyCN 就白设了。")
+    p.append("#       比如 tencent.com 会把 copilot.tencent.com 吃掉，WorkBuddy（国内版）就白设了。")
     p.extend(inline_rules)
 
     p.append("final, 兜底分流")
@@ -1511,9 +1511,11 @@ def build_router(config, rule_data):
     whitelist_domains = extract_domains_for_router(direct_lines)
 
     # 2. Custom Blacklist / GFWList (Always PROXY on router)
+    #    注意：这里列的是「走代理」的业务组。
+    #    WorkBuddy 是国内版（直连），只有 WorkBuddy AI（海外版）才该进黑名单。
     proxy_lines = []
     for r in config.get("rule_sources", []):
-        if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy", "OpenAI", "Media", "Proxy"):
+        if r.get("target") in ("Claude", "GoogleAI", "WorkBuddy AI", "OpenAI", "Media", "Proxy"):
             rel_path = r.get("file")
             if rel_path and rel_path in rule_data:
                 proxy_lines.extend(rule_data[rel_path])

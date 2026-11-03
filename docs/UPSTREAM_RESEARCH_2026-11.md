@@ -116,7 +116,7 @@
 
 **要点**
 
-- 策略组这件事，当前 9 个组（全球加速、国际媒体、Claude、GoogleAI、OpenAI、WorkBuddyCN、WorkBuddy、兜底分流 + 内置 direct/reject）已经覆盖业务，不需要为了"看起来专业"继续加组。加组意味着 QX 配置本体变更 = 一次手动导入，成本落在手机上。
+- 策略组这件事，当前 9 个组（全球加速、国际媒体、Claude、GoogleAI、OpenAI、WorkBuddy、WorkBuddy AI、兜底分流 + 内置 direct/reject）已经覆盖业务，不需要为了"看起来专业"继续加组。加组意味着 QX 配置本体变更 = 一次手动导入，成本落在手机上。
 - 真正值得借鉴的是**机制**，不是别人的组名：
 
 | 写法 | 适用 | 例子 | 代价 |
