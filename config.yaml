@@ -542,3 +542,20 @@ rewrites:
     opt_parser: true
     enabled: true
     desc: "有谱么会员（补 level / isMember / ladder）"
+
+  - id: "fotmob_plus"
+    name: "FotMob+[本地维护]"
+    filename: "fotmob-plus.js"
+    # FotMob 的会员态走 RevenueCat（抓包：api.revenuecat.com 6KB 下 / 2KB 上）。
+    # 只改 RevenueCat 的两块：subscriptions[产品ID] 与 entitlements[权益名]，
+    # 不动 apigw.fotmob.com —— 那边是登录态+服务端同步，路径未知，改了容易崩。
+    #
+    # 必须同时挂请求阶段：RevenueCat 带 x-revenuecat-etag 做协商缓存，
+    # 命中 304 时没有响应体，响应脚本拿不到 body 就什么也改不了。
+    #
+    # 注意 MITM 范围：api.revenuecat.com 是全租户共用域名，
+    # 脚本按 UA 过滤，非 FotMob 的请求一律 $done({}) 原样放行。
+    local_file: "rewrites/local/fotmob-plus.js"
+    opt_parser: true
+    enabled: true
+    desc: "FotMob+ 会员解锁（RevenueCat 注入）"
