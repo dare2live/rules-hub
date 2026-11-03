@@ -283,13 +283,13 @@ rewrites:
 
   - id: "amap_clean_script"
     name: "高德内容净化脚本[本地维护]"
-    filename: "amap.trim.v5.js"
+    filename: "amap.trim.v6.js"
     # mirror_only：只把脚本自托管出去，供 AmapBlock.conf 用 script-response-body
     # 引用。它本身不是订阅条目 —— 自包含重写靠头部注释里的 [rewrite_local]
     # 声明块生效，本文件没有那个块，挂成订阅就是提取不到规则的无效条目。
     # 注意：改脚本内容必须换文件名，QX 按 URL 缓存脚本本体，同名改内容设备不重下。
     mirror_only: true
-    local_file: "rewrites/local/amap.trim.v5.js"
+    local_file: "rewrites/local/amap.trim.v6.js"
     opt_parser: true
     enabled: true
     desc: "高德内容净化脚本（按 dataType 整卡删除，全程异常兜底）"

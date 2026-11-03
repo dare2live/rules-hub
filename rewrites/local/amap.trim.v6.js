@@ -34,13 +34,18 @@ v5 相对 v4 的改动（首页榜单卡一张都没删掉）：
 
 关于调试：QX 的 $notify 在设备上必须开了通知权限才有提示（关掉是静默 no-op）。
   所以不用通知做探针，改成在「第一张保留的卡片标题」后面追加
-  〔删除数/卡片总数〕。看到 〔0/6〕 说明脚本跑到了但一张都没认出；
-  看到 〔2/6〕 说明生效。DEBUG 关掉后不再追加任何标记。
+  〔删除数/卡片总数〕。**只在「一张都没删掉」时才追加** —— 成功时界面干净，
+  失败时又能区分两种情况：
+    完全没有方括号 → 脚本没跑到这个接口（URL 规则没匹配上）
+    〔0/N〕        → 脚本跑到了，找到了 N 张卡但认不出一张该删
+    〔0/0〕        → 跑到了，但连卡片容器都没找到
+  把 DELETE_MARK 关掉就彻底不显示任何标记。
 
 安全底线：任何异常都必须走到 $done，绝不挂死请求。
 ***********************************************/
 
-var DEBUG = true;
+// 失败时才在卡片标题上追加诊断标记（成功时不显示，避免影响观感）
+var DELETE_MARK = true;
 
 // 可见文字关键字（简体 + 繁体）。服务端按 locale 下发。
 var KEYWORDS = [
@@ -331,7 +336,11 @@ if (!amapIsObj(amapObj)) {
         }
       }
 
-      if (DEBUG) amapSerialized = amapMark(amapObj, amapRemoved, amapTotal);
+      // 探针只在失败时出现：成功时界面干净，失败时能区分
+      // 「没跑到」（无标记）和「跑到了但认不出」（〔0/N〕）
+      if (DELETE_MARK && amapRemoved === 0) {
+        amapSerialized = amapMark(amapObj, amapRemoved, amapTotal);
+      }
     }
   } catch (e) {
     amapObj = null;
