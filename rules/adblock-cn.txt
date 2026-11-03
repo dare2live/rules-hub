@@ -1,0 +1,42 @@
+# 国产广告联盟 / 广告 SDK / 第三方监测
+#
+# 来源：2026-11-03 对「小蚁摄像机」(com.360ants.yihome，上海看米 / kamivision)
+# 7.0.6 的 QX 网络活动抓包。这些域名全部是广告竞价、素材分发、归因与监测，
+# 不含任何 App 功能接口 —— 拦掉只影响广告展示，不影响设备连接、回放、推送。
+#
+# 为什么单独建一个文件，而不是并进 rules/reject.txt：
+#   reject 排在 custom_direct 之后，而 custom_direct 里有 qq.com / baidu.com
+#   这类大后缀，会先把 mi.gdt.qq.com、mobads.baidu.com 放行成 DIRECT。
+#   这批规则必须排在业务直连之前才生效（和 2026-11 WorkBuddy 那次同一个坑）。
+#
+# 归属核对（whois）：
+#   divms.cn    上海推易软件技术有限公司
+#   adprod.cn   深圳市素人网络科技有限公司
+#   其余为上海 / 北京的广告联盟（fancyapi、dmrtb 多盟、66mobi、leadmoad、
+#   xiawan8、medproad、ydmob）
+#
+# 已知代价：部分 App 的「看广告换积分 / 激励视频」会因此失效（拿不到广告就发不了奖励）。
+# 出现这类问题，把对应域名从这里移出即可，不要整体取消。
+
+# 广告联盟 / DSP / 竞价平台
+DOMAIN-SUFFIX,fancyapi.com
+DOMAIN-SUFFIX,fancysdsp.com
+DOMAIN-SUFFIX,dmrtb.com
+DOMAIN-SUFFIX,66mobi.com
+DOMAIN-SUFFIX,leadmoad.com
+DOMAIN-SUFFIX,xiawan8.com
+DOMAIN-SUFFIX,medproad.com
+DOMAIN-SUFFIX,ydmob.com
+DOMAIN-SUFFIX,adprod.cn
+DOMAIN-SUFFIX,divms.cn
+
+# 广点通 / 百度联盟：只精确到广告子域，不动 qq.com / baidu.com 主域
+DOMAIN,mi.gdt.qq.com
+DOMAIN-SUFFIX,mobads.baidu.com
+
+# 第三方广告监测：秒针、电通
+DOMAIN,g.cn.miaozhen.com
+DOMAIN,t.dentsuchina.cn
+
+# 广告曝光日志
+DOMAIN-SUFFIX,zhangyuyidong.cn

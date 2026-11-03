@@ -2456,7 +2456,14 @@ def main():
                 continue
             
             # Immunity protection: NEVER let upstream advertising block user whitelist or direct domains
-            if is_reject:
+            #
+            # skip_immunity：给「精确到广告子域」的规则源开的口子。
+            # direct.txt 里有 qq.com / baidu.com 这类大后缀，默认豁免会连带放行
+            # mi.gdt.qq.com（广点通）、mobads.baidu.com（百度联盟）——
+            # 2026-11 小蚁摄像机弹窗拦不住就是这个原因：规则写了，构建期被删了，
+            # 而且不报错（只在条数上少两条）。
+            # 只对该源放行，全局豁免仍然生效。
+            if is_reject and not r.get("skip_immunity"):
                 d = extract_domain(norm)
                 if d and (d in immunity_set or any(d.endswith("." + imm) for imm in immunity_set)):
                     continue

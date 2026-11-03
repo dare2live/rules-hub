@@ -163,6 +163,21 @@ rule_sources:
     file: "rules/unbreak.txt"
     desc: "防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）"
 
+  # 广告规则里唯一「必须排在业务直连之前」的一组，理由见 rules/adblock-cn.txt 头部。
+  # 上游 reject 排在 custom_direct 之后，qq.com / baidu.com 会把广点通和百度联盟
+  # 提前放行成 DIRECT —— 那就是 2026-11 小蚁摄像机弹窗拦不住的原因之一。
+  - id: "adblock_cn"
+    target: "REJECT"
+    file: "rules/adblock-cn.txt"
+    # 跳过「防误杀豁免」。默认逻辑是：reject 源里凡是命中 direct.txt 后缀的规则
+    # 都会被丢掉，以免上游广告库误杀银行/支付。但 direct.txt 里有 qq.com 与
+    # baidu.com，会把 mi.gdt.qq.com（广点通）和 mobads.baidu.com（百度联盟）
+    # 一起豁免掉 —— 规则看得见、产物里没有、也不报错。
+    # 本文件全部是精确到广告子域的条目，打开这个开关是安全的；
+    # 其它 reject 源（上游大库）仍然走默认豁免。
+    skip_immunity: true
+    desc: "国产广告联盟 / 广告 SDK / 监测（小蚁摄像机实测，排在业务直连之前才生效）"
+
   - id: "claude"
     target: "Claude"
     file: "rules/claude.txt"

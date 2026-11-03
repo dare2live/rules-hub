@@ -1,6 +1,6 @@
 # 分流规则体检报告
 
-> 生成时间：2026-11-03 16:24（北京时间）
+> 生成时间：2026-11-03 20:38（北京时间）
 > 工具：`scripts/rules_lint.py`（只读，不改任何规则）
 > 检查对象：`dist/qx/*.list`，即真正下发给设备的规则表
 
@@ -11,6 +11,7 @@
 | 规则源 | 规则数 | 被遮蔽 | 其中策略冲突 |
 |---|---:|---:|---:|
 | unbreak（内联 filter_local） | 33 | 0 | 0 |
+| adblock_cn | 15 | 0 | 0 |
 | claude | 6 | 0 | 0 |
 | google_ai | 29 | 1 | 0 |
 | workbuddy_cn | 16 | 0 | 0 |
@@ -20,9 +21,9 @@
 | tiktok | 34 | 1 | 0 |
 | proxy | 38 | 0 | 0 |
 | custom_direct | 183 | 2 | 0 |
-| reject | 290 | 58 | 58 |
+| reject | 290 | 58 | 57 |
 
-合计：925 条，被遮蔽 **64** 条，其中会改变走向的 **58** 条。
+合计：940 条，被遮蔽 **64** 条，其中会改变走向的 **57** 条。
 
 ## 二、会改变走向的遮蔽（要决策）
 
@@ -62,7 +63,6 @@
 | `m.atm.youku.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,youku.com`（custom_direct） |
 | `m.suning.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,suning.com`（custom_direct） |
 | `mapi.m.jd.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,jd.com`（custom_direct） |
-| `mobads.baidu.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,baidu.com`（custom_direct） |
 | `mobilead.kuwo.cn` | REJECT | DIRECT | `DOMAIN-SUFFIX,kuwo.cn`（custom_direct） |
 | `nbcollect.kugou.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,kugou.com`（custom_direct） |
 | `nbcollectretry.kugou.com` | REJECT | DIRECT | `DOMAIN-SUFFIX,kugou.com`（custom_direct） |
@@ -110,6 +110,10 @@
 ### tiktok（1 条）
 
 - `DOMAIN-KEYWORD,musical.ly` ← 被 `DOMAIN-SUFFIX,musical.ly`（tiktok）覆盖
+
+### reject（1 条）
+
+- `DOMAIN-KEYWORD,mobads.baidu.com` ← 被 `DOMAIN-SUFFIX,mobads.baidu.com`（adblock_cn）覆盖
 
 ## 五、同一文件内的重复条目
 

@@ -13,6 +13,11 @@ general:
     value: 'true'
   - key: allow-wifi-access
     value: 'false'
+    note: |
+      默认关闭。开着等于把本机变成局域网代理（有被蹭网风险）。
+      2026-11-03 为抓手机端流量临时改过 true，代价是 Surge reload 时会重写
+      系统代理设置，和手动配的 Wi-Fi 代理叠在一起会形成回环、表现为「Wi-Fi 连不上」。
+      抓手机流量改用 QX 自带的「网络活动」即可（TUN 层，QUIC 也能看到），不要再动这个开关。
   - key: ipv6
     value: 'false'
   - key: test-timeout
