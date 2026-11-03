@@ -23,6 +23,7 @@ bash scripts/update_qx.sh             # iOS 的 QX：生成→推 KV→判断要
 python3 scripts/publish_private.py --show    # 忘了口令
 python3 scripts/publish_private.py --rotate  # 口令泄露
 /usr/bin/python3 scripts/upstream_audit.py   # P0 上游健康审计（只读）：写 data/audit + docs/UPSTREAM_AUDIT_*.md
+/usr/bin/python3 scripts/rules_lint.py       # 规则体检：推演 dist 里真正下发的规则，找「写了但不生效」的
 cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了本文件必须同步，否则下次会话加载不到
 ```
 
@@ -52,7 +53,8 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 | 改动位置 | QX (iOS) | Surge (Mac) | 小火箭 | Clash | 软路由 |
 |---|---|---|---|---|---|
 | `rules/*.txt` 业务规则（claude/openai/proxy/reject…） | 自动 | 自动 | 自动 | 自动 | 自动（周日 04:10 cron） |
-| `rules/direct.txt` / `unbreak.txt` | **手动导入** | 自动 | 自动 | 自动 | 自动 |
+| `rules/unbreak.txt` | **手动导入** | 自动 | 自动 | 自动 | 自动 |
+| `rules/direct.txt` | 自动 | 自动 | 自动 | 自动 | 自动 |
 | `config.yaml` 策略组增减 / 规则源增减 | **手动导入** | 跑 `update_surge.sh` | 手动加引用 | **手动导入** | 自动 |
 | `config/surge.yaml`（General 等） | — | 跑 `update_surge.sh` | — | — | — |
 | 重写脚本（`rewrites:`） | 自动 | 不输出 | 不输出 | 不输出 | 不输出 |
@@ -63,9 +65,11 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 - 各端引用的都是**远程规则集**（QX `filter_remote`、Surge `RULE-SET`、Clash
   `rule-providers`、小火箭自己的规则集订阅），带 `update-interval=86400`，
   所以改 `rules/*.txt` 推上去之后，所有 App 自己就会拉到新版，**不用逐个提醒**。
-- 例外是 QX：`rules/direct.txt` 除了进远程集，还会被 `build_qx_inline_direct_rules()`
-  内联进 `[filter_local]`。而 `[filter_local]` 属于配置本体，QX **没有整份配置的
-  自动刷新**，所以改直连规则必须手动导入一次。用 `update_qx.sh` 会自动比对并提示。
+- 例外是 QX：只有 `rules/unbreak.txt`（防误杀 + BYD）会被
+  `build_qx_inline_direct_rules()` 内联进 `[filter_local]`。而 `[filter_local]`
+  属于配置本体，QX **没有整份配置的自动刷新**，所以只有改它才必须手动导入一次。
+  `rules/direct.txt` 已改为纯远程（`custom_direct.list`，排在业务列表之后），
+  改它不用动手机 —— 曾经的「direct 也内联」是 2026-11 WorkBuddy 分流故障的根因。
 - Mac 的 Surge 产物**故意不带** `#!MANAGED-CONFIG`（因为有 `config/local.surge.yaml`
   时它就是拿来直接用的成品，不能再被线上版本冲掉），所以必须跑 `update_surge.sh`。
 - 重写目前**只有 QX 一端有产物**（`dist/qx/rewrites/`）。Surge / 小火箭 / Clash
@@ -109,8 +113,10 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
    设备不会自己更新 —— 删掉一个节点订阅却不重新导入，手机上就还挂着那个订阅。
    `update_qx.sh` 的 `extract_body()` 已经把这三个段纳入快照比较，就是为了抓住这类改动。
    `[general] [dns] [policy] [mitm] [filter_local] [rewrite_local] [task_local]` 全是本体，
-   改了必须手动导入一次。另外 `rules/direct.txt` 会同时写进 `[filter_local]`（内联白名单）
-   和 `[filter_remote]`，所以**改直连规则仍需手动导入**。
+   改了必须手动导入一次。现在 `[filter_local]` 里只有 `unbreak.txt` 的内联内容
+   （BYD 等高危白名单），`direct.txt` 走远程 `custom_direct` —— 改直连规则不用再导入。
+   **改完 `[filter_remote]` 的顺序或新增远程资源，先 push 等 Pages 上线，再让设备导入**：
+   配置里引用了还没部署的 `.list` 会 404，geoip 兜底直接消失、未命中流量全落 final。
 9. **重写文件里内联引用的脚本也必须自托管**。`mirror_inline_scripts()` 会把
    `script-response-body` 后面的外部 URL 下载镜像到 `dist/qx/rewrites/scripts/`。
    只把 `.conf` 本身自托管是不够的 —— 文件从国内拿得到、它要用的脚本却要回 GitHub 拿，
@@ -207,6 +213,11 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 7. **Surge 只支持 `PROCESS-NAME`，不支持 `PROCESS-PATH`**（二进制里搜得到 `PROCESS-NAME` 而已）。
    两个 WorkBuddy 客户端可执行文件都叫 `Electron`，进程层分不开 —— 只能按**域名**拆。
    `config.yaml` 里给规则源加 `process_platforms: ["qx"]` 可以只让 QX 侧输出进程规则。
+8. **Mac 的 Surge 产物是静态文件，不会跟着仓库变**。改策略组名、改规则源、改 `[General]`
+   之后，本机 `~/Library/Application Support/Surge/Profiles/Surge-RulesHub.conf` 还是旧的，
+   `surge-cli dump policy` 里能看到旧组名（甚至新旧两组并存）。
+   判断"要不要更新"直接 `diff` 本机文件与 `dist/surge/profile.conf`，有差异就跑
+   `bash scripts/update_surge.sh`。改名这类改动必须跑，否则规则引用指向不存在的策略组。
 
 ### 验证方法
 
@@ -338,6 +349,51 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   它头部写「不含微博 / 闲鱼 / 喜马拉雅 / Youtube / 高德 / 小红书等」，
   但 hostname 里实际带着 `api.weibo.cn`、`acs.m.goofish.com`、`api.xueqiu.com`。
   判断「是否与现有订阅重复」要看 **hostname 实际内容**，不要信注释。
+- **改名策略组是最容易漏的改动，连带面比想象大**（2026-11 `WorkBuddyCN → WorkBuddy`）。
+  组名同时出现在：`config.yaml` 的 `name` / `target` / `default_select` / `proxies`、
+  `config/qx.yaml` 的 `tag_map` / `policy_order` / `icons`、`README.md`、
+  以及 **`generator/build.py` 里的业务判据**（当时用 `target in ("WorkBuddy", ...)`
+  决定哪些规则进路由的代理黑名单）。
+  **组名既是数据也是逻辑条件**：改名后 `WorkBuddy` 从"海外版"变成"国内版"，
+  那句判据会把国内版塞进代理黑名单 —— 编译不报错、规则看着正常，只有路由表错了。
+  改名前 `grep -rn` 全仓（排除 `dist/`、`.workbuddy/`），逐处确认语义而不是只换字符串。
+- **YAML 的 `tag_map` 不能有重复 key**（同日踩到）。原本已有 `workbuddy: WorkBuddy`，
+  加新行 `workbuddy_cn: WorkBuddy` 之后又不小心补了一行 `workbuddy: WorkBuddy`，
+  YAML 取后者、静默覆盖，结果两个订阅的 tag 都变成 `WorkBuddy`。
+  **YAML 重复 key 不报错、只取最后一个** —— 改完用
+  `python3 -c "import yaml;print(yaml.safe_load(open('config/qx.yaml'))['tag_map'])"`
+  打印实际解析结果，不要看文件里"看起来对"。
+- **构建失败必须是失败，不能静默降级**（2026-11 实测）。同一台机器连续构建三次，
+  会随机有一次 GitHub raw 超时；原实现"抓不到就只用本地规则"，构建照样成功、照样发布，
+  但 `reject.list` 从 794 条掉到 **12 条**、`media.list` 少 800 条 ——
+  只输出一行 ⚠️，没有任何东西会让人停下来。
+  现在是：成功即落盘 `data/cache/upstream/`（已 gitignore）→ 失败重试 2 次 →
+  回退上次成功的缓存 → **连缓存都没有就 `sys.exit(1)`**。
+  判断一次构建是否可信，看规则条数而不是看退出码：
+  **reject ≈ 790+ 条、media ≈ 1300+ 条**，明显低于这个量级就是抓取出了问题。
+- **改完规则跑一次 `rules_lint.py`，但要能分清"bug"和"取舍"**。它按真实匹配顺序
+  （`filter_local` → `filter_remote` 顺序 → geoip → final）推演下发的域名规则。
+  2026-11 的结果：925 条里 64 条被遮蔽、58 条策略冲突，全部是 `reject` 被
+  `custom_direct` / `tiktok` 抢先。**判定：不改** —— 这 58 条里混着
+  `p3.pstatp.com`（头条图片 CDN）、`ynuf.alipay.com`（支付宝风控）、`apiinit.amap.com`
+  （高德 SDK 初始化），整体把 reject 提前就是误杀。
+  **"宁可漏拦、不可误杀"是刻意设计，冲突条数是它的成本，不是待修的 bug。**
+  只有出现新类型的冲突（比如业务列表之间互相吃）才值得动。
+- **`publish_private.py` 推 KV 会被弱网卡死**（2026-11，手机热点下反复失败）。
+  wrangler 的 PUT 内部超时写死约 10s，实测这条链路 PUT 到 Cloudflare 要 9.8s，刚好踩线，
+  报 "Please check your internet connection" 但其实连得上 —— **不是网络断了，是等不起**，
+  重试多少次都一样。脚本已加兜底：wrangler 失败后改用 curl 直连写同一个 KV，
+  强制 `--http1.1`、去掉 `Expect: 100-continue`、超时放宽到 60s。
+  注意 **Content-Type 只在有 body 时加**：GET `/accounts` 带 `application/octet-stream`
+  会被 Cloudflare 判 400（错误码 6003），排查时会误以为是 token 失效。
+- **WorkBuddy 的分流本质是"按域名 = 按账号"**（2026-11 反编译确认）。
+  iOS 上只有一个 App，国内版 / 海外版的区别来自登录账号：服务端登录后下发
+  `isOversea` / `endpoint`，客户端据此把 baseUrl 切到 `workbuddy.cn` 或 `workbuddy.ai`。
+  所以域名分流天然等价于账号分流，换账号不用改配置；**也不存在"按请求头/路径区分"
+  的可行方案**（那要 MITM 解密，App 一做证书校验就挂）。
+  另一半结论：`workbuddy.ai` 的 CNAME 是 `*.eo.dnse2.com`（腾讯 EdgeOne），
+  本身就按来源就近调度，**绕新加坡等于废掉就近调度再加一跳回国** ——
+  实测直连更快，海外侧默认应为 `DIRECT`，新加坡节点只留作手切对比。
 - **同名订阅留着「已停用」条目没意义**。用户视角就是列表里多一条默认不选中的死条目。
   确认弃用就**连条目一起删**（在原地留一段 YAML 注释说明为什么删），
   别只设 `enabled: false` —— 那只是把垃圾藏起来。
