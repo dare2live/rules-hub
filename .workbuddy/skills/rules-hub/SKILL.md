@@ -410,6 +410,24 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   它目前还能用，是因为这类上游 `.conf` 自带 `hostname = ...` 行，QX 运行时会再解析一次 ——
   属于「靠客户端兜底，不是靠我们自己的配置」，换客户端或上游删掉那行就失效。
   **改完 MITM 相关必须拿产物 grep 域名确认**，别相信「规则写了就一定会解密」。
+- **「防误杀豁免」会在构建期静默删掉广告子域**（2026-11 小蚁摄像机弹窗拦不住的根因）。
+  `build.py` 里有一条 immunity 逻辑：reject 源中只要域名命中 `unbreak.txt` /
+  `direct.txt` 的后缀，就直接 `continue` 丢掉。而 `direct.txt` 有 `qq.com`、`baidu.com`，
+  于是 `mi.gdt.qq.com`（广点通）、`mobads.baidu.com`（百度联盟）永远进不了 reject ——
+  **规则写在文件里、`to_qx_rule` 转换也正常，但产物里没有，日志只有条数差**。
+  排查这类「规则写了不生效」：直接看 `dist/qx/<id>.list` 有没有那条，
+  不要只 grep 源文件。修复方式是该源加 `skip_immunity: true`（只对该源放行），
+  前提是文件里全部是精确到广告子域的条目，不能塞功能域名。
+- **广告规则的顺序必须早于 `custom_direct`**。业务直连里有 `qq.com` / `baidu.com` /
+  `tencent.com` 这类大后缀，放在 reject 前面会把整个广告联盟放行成 DIRECT。
+  新增广告源的定位：`unbreak` 之后、所有业务之前。
+- **不要用 Surge 的 `allow-wifi-access` 抓手机包**（2026-11 踩到，代价是 Mac 断网）。
+  打开后 `update_surge.sh` 会 reload，Surge 重写系统代理，和手动配的 Wi-Fi 代理叠在一起
+  会形成回环，表现是「Wi-Fi 识别不了 / 连不上」。
+  **抓手机流量用 QX 自带的「网络活动」**：它在 TUN 层，连 QUIC（UDP 443）都能看到，
+  而 HTTP 代理抓不到 QUIC；而且不用改任何系统设置。
+  如果已经在 Mac 上手动配过代理，恢复顺序：`networksetup -setwebproxystate "Wi-Fi" off`
+  → 三个代理都关 → 确认 `scutil --proxy` 只剩 Surge 自己的 127.0.0.1:6152。
 - **同名订阅留着「已停用」条目没意义**。用户视角就是列表里多一条默认不选中的死条目。
   确认弃用就**连条目一起删**（在原地留一段 YAML 注释说明为什么删），
   别只设 `enabled: false` —— 那只是把垃圾藏起来。
