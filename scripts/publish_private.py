@@ -30,6 +30,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PRIVATE_DIR = BASE_DIR / ".private"
 TOKEN_FILE = PRIVATE_DIR / "token"
 WRANGLER_TOML = BASE_DIR / "worker" / "wrangler.toml"
+WRANGLER_CONFIG = Path.home() / "Library" / "Preferences" / ".wrangler" / "config" / "default.toml"
 
 SURGE_PROFILE = (
     Path.home() / "Library" / "Application Support" / "Surge" / "Profiles" / "Surge-RulesHub.conf"
@@ -81,6 +82,54 @@ def load_token(rotate=False):
     return token
 
 
+def read_oauth_token():
+    """从 wrangler 的登录态里读 OAuth token（curl 兜底用，不打印）。"""
+    if not WRANGLER_CONFIG.exists():
+        return None
+    m = re.search(r'oauth_token\s*=\s*"([^"]+)"', WRANGLER_CONFIG.read_text())
+    return m.group(1) if m else None
+
+
+def cf_api(method, url, token, data=None, timeout=60):
+    """直接打 Cloudflare API。
+
+    为什么需要这条兜底：wrangler 的请求超时是写死的（约 10s），
+    在手机热点 / 境外出口这类弱网下，PUT 一个 30KB 的配置经常刚好超时，
+    报「Please check your internet connection」——重试几次也一样，
+    因为不是连不上，是 10 秒不够。这里用同一个 token 走 curl，
+    强制 HTTP/1.1 并去掉 Expect: 100-continue（弱网下这两样都会卡），
+    超时放宽到 60s。
+    """
+    cmd = ["curl", "-s", "--http1.1", "-H", "Expect:",
+           "-m", str(timeout), "-X", method,
+           "-H", f"Authorization: Bearer {token}",
+           "-w", "\n%{http_code}"]
+    if data is not None:
+        # Content-Type 只在有 body 时加：KV 的 value 是二进制流，
+        # 但 GET /accounts 带 application/octet-stream 会被 CF 判 400（6003）。
+        cmd += ["-H", "Content-Type: application/octet-stream",
+                "--data-binary", f"@{data}"]
+    cmd.append(url)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 20)
+    body, _, code = r.stdout.rpartition("\n")
+    return code.strip(), body
+
+
+def kv_put_curl(namespace_id, key, path, token):
+    code, body = cf_api("GET", "https://api.cloudflare.com/client/v4/accounts", token, timeout=30)
+    if code != "200":
+        return False, f"取 account id 失败（HTTP {code}）"
+    ids = re.findall(r'"id"\s*:\s*"([0-9a-f]{32})"', body)
+    if not ids:
+        return False, "没有可用的 account id"
+    url = (f"https://api.cloudflare.com/client/v4/accounts/{ids[0]}"
+           f"/storage/kv/namespaces/{namespace_id}/values/{key}")
+    code, body = cf_api("PUT", url, token, data=str(path))
+    if code != "200":
+        return False, f"curl 兜底失败（HTTP {code}）"
+    return True, ""
+
+
 def kv_put(namespace_id, key, path):
     cmd = [
         "wrangler", "kv", "key", "put", key,
@@ -89,10 +138,18 @@ def kv_put(namespace_id, key, path):
         "--remote",
     ]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    if r.returncode != 0:
-        tail = (r.stderr or r.stdout or "").strip().splitlines()[-4:]
-        return False, " / ".join(tail)
-    return True, ""
+    if r.returncode == 0:
+        return True, ""
+    # wrangler 超时/连不上时，换 curl 直连（见 cf_api 注释）
+    token = read_oauth_token()
+    if token:
+        ok, err = kv_put_curl(namespace_id, key, path, token)
+        if ok:
+            print(f"   ↳ wrangler 超时，已用 curl 直连写入 [{key}]")
+            return True, ""
+        return False, f"{err}（wrangler: {(r.stderr or r.stdout or '').strip().splitlines()[-1:] or ['?']}）"
+    tail = (r.stderr or r.stdout or "").strip().splitlines()[-4:]
+    return False, " / ".join(tail)
 
 
 def show(domain, token, rows):
