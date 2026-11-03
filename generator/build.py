@@ -785,6 +785,7 @@ def build_qx_dns_lines():
 def build_qx(config, rule_data, produced=None):
     QX_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
+    write_qx_geoip_list()
 
     # 1. Output individual modular .list files for QX
     for r in config["rule_sources"]:
@@ -832,7 +833,8 @@ def build_qx(config, rule_data, produced=None):
     qx.append("[server_remote]")
     qx.append("")
     qx.append("[filter_local]")
-    qx.append("geoip, cn, direct")
+    qx.append("# 内联规则优先级高于所有 filter_remote，这里只放通用兜底；")
+    qx.append("# 业务分组（Claude / WorkBuddy …）一律走下面的远程资源，才不会被压掉。")
     qx.append("final, 兜底分流")
     qx.append("")
     qx.append("[filter_remote]")
@@ -842,6 +844,8 @@ def build_qx(config, rule_data, produced=None):
         force_target = map_target_to_qx(target)
         if "file" in r:
             qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+    # geoip 必须是最后一条：前面所有域名规则都没命中时才轮到它
+    qx.append(qx_geoip_remote_line(base_url))
     qx.append("")
     qx.append("[rewrite_local]")
     qx.extend(build_qx_selftest_rules(base_url))
@@ -1158,8 +1162,12 @@ def build_rewrites(config):
         target = r.get("target")
         desc = r.get("desc", rule_id)
         if "file" in r:
-            filter_remote_snippets.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={target}, update-interval=86400, opt-parser=true, enabled=true")
-            
+            # 用映射后的策略名：QX 内置是 direct / proxy，写成 DIRECT 会引用不到
+            force_target = map_target_to_qx(target)
+            filter_remote_snippets.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+    # 与 profile.conf 保持一致：geoip 兜底放在最后
+    filter_remote_snippets.append(qx_geoip_remote_line(base_url))
+
     with open(QX_DIST / "filter_remote.snippet", "w", encoding="utf-8") as f:
         f.write("\n".join(filter_remote_snippets) + "\n")
 
@@ -1211,7 +1219,7 @@ def build_rewrites(config):
 
 
 def build_qx_inline_direct_rules():
-    """把「防误杀白名单 + 个人直连白名单」编译成 QX 的 filter_local 内联规则。
+    """把「防误杀白名单」编译成 QX 的 filter_local 内联规则。
 
     为什么必须内联，而不是只靠 filter_remote 订阅：
       1. QX 的匹配顺序是 filter_local → filter_remote → final，
@@ -1220,9 +1228,19 @@ def build_qx_inline_direct_rules():
          一旦订阅没拉到、或域名解析出境外 IP 导致 geoip,cn 不命中，
          就会被 final 兜底策略送进代理，App 直接报网络错误；
       3. 内联后即使 GitHub Pages 在国内抽风、订阅 24h 未更新，直连依然成立。
+
+    为什么只内联 unbreak.txt、不再内联 direct.txt：
+      filter_local 的优先级高于所有 filter_remote，而 direct.txt 里有一批
+      大范围后缀（tencent.com / myqcloud.com / qcloud.com）。把它们内联进来，
+      等于让「通用直连」压过「业务分组」：
+        · copilot.tencent.com 先被 tencent.com 吃掉 → WorkBuddyCN 组形同虚设；
+        · cos.ap-singapore.myqcloud.com 先被 myqcloud.com 吃掉 →
+          海外版资源桶被强制直连，workbuddy.list 里那条规则永远不生效。
+      direct.txt 现在作为远程资源 custom_direct 排在业务列表之后，
+      仍然直连，只是不再抢业务规则的位置。
     """
     rules = []
-    for rel in ("rules/unbreak.txt", "rules/direct.txt"):
+    for rel in ("rules/unbreak.txt",):
         fpath = BASE_DIR / rel
         if not fpath.exists():
             continue
@@ -1242,6 +1260,41 @@ def build_qx_inline_direct_rules():
             seen.add(r)
             out.append(r)
     return out
+
+
+QX_GEOIP_FILE = "geoip_cn.list"
+
+
+def write_qx_geoip_list():
+    """国内 IP 兜底直连，写成一条独立的远程资源。
+
+    为什么要单独成一条，而不是继续写在 [filter_local]：
+      QX 的匹配顺序是 filter_local → filter_remote → final。以前 geoip 写在
+      filter_local，等于排在所有业务规则前面：
+        1) 任何解析到国内 IP 的域名都不可能再被业务组接管（业务规则被架空）；
+        2) 每条新连接都要先本地解析一次才能判 geoip，和 [dns] 里
+           「境外域名不在本地解析」的设计互相打架，首包白白多一个 RTT。
+      把它放到 filter_remote 的最后一条，才是真正的兜底：
+      只有前面所有域名规则都没命中时，才去解析并判断归属。
+    """
+    QX_DIST.mkdir(parents=True, exist_ok=True)
+    content = [
+        "# 国内 IP 兜底直连（Quantumult X）",
+        "# Source: Rules Hub",
+        "#",
+        "# 必须排在 [filter_remote] 的最后一条：它的作用是「前面都没命中时」，",
+        "# 而不是「优先判断」。放到前面会架空前后的所有业务分组。",
+        "",
+        "geoip, cn, direct",
+    ]
+    (QX_DIST / QX_GEOIP_FILE).write_text("\n".join(content) + "\n", encoding="utf-8")
+
+
+def qx_geoip_remote_line(base_url):
+    return (
+        f"{base_url}/qx/{QX_GEOIP_FILE}, tag=国内直连兜底, force-policy=direct, "
+        f"update-interval=86400, opt-parser=false, enabled=true"
+    )
 
 
 def build_qx_dns_block(dns_block):
@@ -1340,7 +1393,8 @@ def generate_personal_qx_config(config, produced=None):
     p.append(f"# 规则与重写自托管: {base_url}")
     p.append(f"# 节点: {', '.join(node_tags) if node_tags else '(未检测到 server_local 节点)'}")
     p.append(f"# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
-    p.append("# 本次关键修复: 直连白名单（含 BYD/DiLink）已内联到 [filter_local]，不再依赖订阅刷新")
+    p.append("# 本次关键修复: 业务规则（WorkBuddyCN / WorkBuddy 等）不再被内联直连规则压掉；")
+    p.append("#               geoip 兜底移到 filter_remote 最后一条；WorkBuddy 默认钉在新加坡节点")
     p.append("")
 
     p.append("[general]")
@@ -1370,13 +1424,13 @@ def generate_personal_qx_config(config, produced=None):
         p.append(f"ip-cidr, {cidr}, direct")
 
     inline_rules = build_qx_inline_direct_rules()
-    p.append("# 防误杀白名单 + 个人直连白名单（内联，优先级高于远程订阅与 geoip）")
+    p.append("# 防误杀白名单（内联，优先级高于所有远程订阅）")
     p.append("# 关键：BYD / DiLink 等「国内域名 + 境外 IP」的服务必须在这里直连，")
-    p.append("#       否则会被 final 兜底送进代理，App 报「网络错误」。")
+    p.append("#       否则订阅拉取失败或域名解析出境外 IP 时，会被 final 送进代理。")
+    p.append("# 注意：普通国内站点不内联。内联规则会压过 filter_remote 里的业务分组，")
+    p.append("#       比如 tencent.com 会把 copilot.tencent.com 吃掉，WorkBuddyCN 就白设了。")
     p.extend(inline_rules)
 
-    p.append("# 国内 GeoIP 直连，其余走兜底")
-    p.append("geoip, cn, direct")
     p.append("final, 兜底分流")
     p.append("")
 
@@ -1387,6 +1441,8 @@ def generate_personal_qx_config(config, produced=None):
         force_target = map_target_to_qx(target)
         if "file" in r:
             p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+    # geoip 必须是最后一条：前面所有域名规则都没命中时才轮到它
+    p.append(qx_geoip_remote_line(base_url))
     p.append("")
 
     p.append("[rewrite_local]")

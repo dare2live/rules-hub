@@ -1,7 +1,42 @@
-# 防误杀白名单（修正可能被广告规则拦截的正常功能域名）
+# 防误杀白名单 + 必须内联的直连（修正可能被广告规则拦截的正常功能域名）
+# 这个文件会被原样内联进 QX 的 [filter_local]，优先级高于所有 filter_remote 订阅，
+# 所以只放「订阅挂了也必须直连」的条目，不要放普通国内站点。
 DOMAIN,app.adjust.com
 DOMAIN,analytics.slashdotmedia.com
 DOMAIN,app.appsflyer.com
 DOMAIN-SUFFIX,apple.com
 DOMAIN-SUFFIX,icloud.com
 DOMAIN-SUFFIX,crashlytics.com
+
+# 比亚迪 (BYD) 车联、车机与云服务（从 direct.txt 移来）
+# 这里的规则会被内联进 [filter_local]，优先级高于所有远程订阅；
+# BYD App 会轮换使用多个云端域名，且对出口 IP 地区敏感，
+# 一旦被代理到境外会直接报「网络错误」，属于宁可重复也不能丢的一类。
+DOMAIN-SUFFIX,byd.com
+DOMAIN-SUFFIX,byd.com.cn
+DOMAIN-SUFFIX,bydauto.com
+DOMAIN-SUFFIX,bydauto.com.cn
+DOMAIN-SUFFIX,bydauto.cn
+DOMAIN-SUFFIX,bydauto.net
+DOMAIN-SUFFIX,bydcloud.com
+DOMAIN-SUFFIX,byd-auto.net
+DOMAIN-SUFFIX,bydclub.com
+DOMAIN-SUFFIX,bydcare.com
+DOMAIN-SUFFIX,bydsemi.com
+DOMAIN-SUFFIX,bydit.com
+DOMAIN-SUFFIX,bydonline.com
+DOMAIN-SUFFIX,bydowstar.com
+DOMAIN-SUFFIX,bydenergy.com
+DOMAIN-SUFFIX,bydservice.com
+DOMAIN-SUFFIX,bydservice.com.cn
+DOMAIN-SUFFIX,bydglobal.com
+DOMAIN-SUFFIX,bydmobile.com
+DOMAIN-SUFFIX,bydlife.com
+DOMAIN-SUFFIX,bydfin.com
+DOMAIN-SUFFIX,dilink.com
+DOMAIN-SUFFIX,diplus.cn
+DOMAIN-KEYWORD,bydauto
+DOMAIN-KEYWORD,bydcloud
+DOMAIN-KEYWORD,bydservice
+# 兜底：任何含 byd 的域名一律直连（BYD App 动态域名较多）
+DOMAIN-KEYWORD,byd

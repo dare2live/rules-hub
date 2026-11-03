@@ -2,6 +2,10 @@
 # 两个客户端（WorkBuddy 国版 / WorkBuddy AI 海外版）共用同一套后端，
 # 域名集合完全一致，所以这里按「域名归属」而不是「哪个 App」来拆。
 # 国内域名绕新加坡会明显变慢（腾讯云北京 / 广州），必须直连。
+#
+# 注意：本列表必须排在 custom_direct（rules/direct.txt）之前才有意义，
+# 否则下面的 tencent.com / myqcloud.com 子域会先被 direct.txt 的
+# 「DOMAIN-SUFFIX,tencent.com」吃掉，WorkBuddyCN 组等于空组，切了没反应。
 DOMAIN-SUFFIX,workbuddy.cn
 DOMAIN-SUFFIX,codebuddy.cn
 DOMAIN-SUFFIX,codebuddy.work
@@ -14,7 +18,12 @@ DOMAIN-SUFFIX,cos.ap-beijing.myqcloud.com
 DOMAIN-SUFFIX,cos.ap-guangzhou.myqcloud.com
 DOMAIN-SUFFIX,cos.accelerate.myqcloud.com
 # 腾讯登录与 SSO：绕境外会被风控判异地
+# tencentid.com 直接用顶级后缀覆盖 account / identity / pre-account 三组子域，
+# 单列 account.tencentid.com 漏掉了 pre-account.tencentid.com（客户端登录会用到）。
+DOMAIN-SUFFIX,tencentid.com
 DOMAIN-SUFFIX,account.tencent.com
-DOMAIN-SUFFIX,account.tencentid.com
 DOMAIN-SUFFIX,identity.tencent.com
-DOMAIN-SUFFIX,identity.tencentid.com
+# 客户端实测会连、但之前没被任何规则覆盖（只能靠 geoip 兜底，多一次本地解析）
+DOMAIN-SUFFIX,tencentcs.com
+DOMAIN-SUFFIX,tencentbuddy.com
+DOMAIN-SUFFIX,tencentmaas.com

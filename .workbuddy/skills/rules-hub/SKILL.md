@@ -315,9 +315,15 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
 - **镜像文件名要保留原始扩展名**。`xxx.png` 存成 `xxx.png.js` 后，GitHub Pages 会按
   `text/javascript` 返回，客户端拿到错误 MIME 就用不了。
 - **QX 分流优先级是「先 `[filter_local]` 后 `[filter_remote]`」**（社区共识）。
-  所以写在本地段的 `geoip, cn, direct` 有可能抢在远程业务规则和 reject 之前 ——
-  前提是没开 QX 的「其他设置 → 分流匹配优化」（开了之后优先级按规则类型排：
-  host > host-suffix > host-keyword > geoip = ip-cidr）。**如果分流行为异常，先确认这个开关。**
+  所以内联进 `[filter_local]` 的规则会压过**所有**远程业务规则 —— 2026-11 踩过：
+  `direct.txt` 里的 `tencent.com` / `myqcloud.com` 把 `workbuddy-cn` 的
+  `copilot.tencent.com` 和 `workbuddy` 的 `cos.ap-singapore.myqcloud.com` 全吃了，
+  表现是「WorkBuddyCN 组切了没反应」+「海外版资源被强制直连、加载慢」。
+  现在的边界：`[filter_local]` 只留 `unbreak.txt`（防误杀 + BYD），
+  `geoip, cn, direct` 挪到 `[filter_remote]` 的最后一条（`geoip_cn.list`）。
+  **判据：范围越窄越靠前；`filter_local` 只放「订阅挂了也必须直连」的东西。**
+  另外 QX「其他设置 → 分流匹配优化」打开后，优先级改成按规则类型排
+  （host > host-suffix > host-keyword > geoip = ip-cidr）。**分流异常时先确认这个开关。**
 - **微信小程序广告：网络层无解，别浪费时间**（2026-11 判定后删除了订阅）。
   开屏广告由**微信客户端内核托管**（`wx.showSplashScreen` 生命周期完全在微信侧，
   开发者拿不到 DOM / 句柄、无法 destroy），这是**平台机制**，不是规则没写对。

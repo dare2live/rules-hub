@@ -76,10 +76,19 @@ policies:
     type: "select"
     desc: "腾讯 WorkBuddy AI 加速通道（境外侧，走新加坡）"
     # QX 侧默认选中项（成员列表第一个）
-    qx_default: "proxy"
+    #
+    # 这里不能写 proxy：QX 的 proxy 是「跟随当前全局选中的节点」。
+    # 全局节点平时多半锁在美国（ChatGPT / Gemini 用），
+    # WorkBuddy 的接口在腾讯云新加坡，绕美国一圈会多出 200~400ms RTT，
+    # 表现出来就是「客户端能开但慢得离谱」。直接钉死新加坡节点。
+    qx_default: "Lightsail Singapore"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "🇸🇬 新加坡自动备用"
+      # QX 里没有 fallback 组（那是 Surge 的写法），必须直接列出节点，
+      # 否则 WorkBuddy 组只剩「全球加速 / direct / proxy」三个成员，
+      # qx_default 找不到目标就被静默忽略，最后又退回跟随全局节点。
+      - "Lightsail Singapore"
       - "Proxy"
       - "DIRECT"
 
@@ -134,15 +143,16 @@ fallback_groups:
 
 # 3. 规则分类与策略映射（本地定制 + 开源知名上游自动融合）
 rule_sources:
+  # 顺序 = 匹配优先级（QX 按 filter_remote 列表从上到下命中，先中先算）。
+  # 原则：范围越窄的越靠前，范围越宽的越靠后。
+  # custom_direct 里有 tencent.com / myqcloud.com / qcloud.com 这类大后缀，
+  # 放到前面会把 workbuddy-cn 的 copilot.tencent.com、
+  # workbuddy 的 cos.ap-singapore.myqcloud.com 全部吃掉，
+  # 表现为「策略组切了没反应」和「海外版资源被强制直连」。
   - id: "unbreak"
     target: "DIRECT"
     file: "rules/unbreak.txt"
     desc: "防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）"
-
-  - id: "custom_direct"
-    target: "DIRECT"
-    file: "rules/direct.txt"
-    desc: "个人专属项目直连、微信、企业微信、国内银行"
 
   - id: "claude"
     target: "Claude"
@@ -212,6 +222,14 @@ rule_sources:
     target: "Proxy"
     file: "rules/proxy.txt"
     desc: "通用海外常用站点（弥补老旧 GFWList 缺失的现代海外站点与 Stremio 详情页海报）"
+
+  # 放在业务列表之后：这里是大范围直连兜底（腾讯 / 阿里 / 字节 / 银行…），
+  # 只有前面没有更具体的业务规则时才由它接管。
+  # 放前面会「吃掉」workbuddy-cn 与 workbuddy 里的子域规则。
+  - id: "custom_direct"
+    target: "DIRECT"
+    file: "rules/direct.txt"
+    desc: "个人专属项目直连、微信、企业微信、国内银行"
 
   - id: "reject"
     target: "REJECT"

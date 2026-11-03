@@ -270,9 +270,13 @@ QX **没有**「整份配置自动刷新」这回事。它的远程订阅只覆�
 上次发布的快照，**只在真的变了才提示你动手**，并把导入链接复制到剪贴板
 （开了接力的话 iPhone 可直接粘贴）。
 
-> ⚠️ 一个已知的不一致：`rules/direct.txt` 会同时写进 `[filter_local]`（内联白名单，
-> 优先级高于远程订阅与 `geoip`）和 `[filter_remote]`（`custom_direct.list`）。
-> 所以改直连规则**仍然需要手动导入一次** —— 内联那份 QX 不会自动更新。
+> 内联进 `[filter_local]` 的只有 `rules/unbreak.txt`（防误杀 + BYD/DiLink）。
+> 它是唯一「改了必须重新导入」的规则文件，因为内容写在配置本体里、不走订阅。
+> `rules/direct.txt` 只作为 `custom_direct.list` 走 `[filter_remote]`，改它**不用**导入。
+>
+> 这条边界是 2026-11 才理清的：以前 `direct.txt` 也内联，结果里面的
+> `tencent.com` / `myqcloud.com` 压过了 `workbuddy-cn` 和 `workbuddy` 的子域规则，
+> 表现为「策略组切了没反应」和「海外版资源被强制直连、加载很慢」。
 
 ### 为什么不再拆一个「纯节点订阅」给 QX
 

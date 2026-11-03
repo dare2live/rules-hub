@@ -2,14 +2,24 @@
 # 说明：两个客户端（WorkBuddy 国版与 WorkBuddy AI 海外版）的 app.asar
 # 域名集合完全一致（553 条零差异），无法按进程名或域名区分身份。
 # 这里只收「归属境外」的域名，国内域名见 rules/workbuddy-cn.txt（直连，排在本条之前）。
+#
+# 顺序要求：本列表必须排在 custom_direct（rules/direct.txt）之前。
+# 否则 cos.ap-singapore.myqcloud.com 会先被 direct.txt 的
+# 「DOMAIN-SUFFIX,myqcloud.com」吃掉，海外版的资源桶被强制直连到新加坡，
+# 这条规则就成了死规则 —— 这正是「海外版加载慢」的直接原因。
 DOMAIN-SUFFIX,workbuddy.ai
 DOMAIN-SUFFIX,codebuddy.ai
 DOMAIN-SUFFIX,workbuddy.cc
 DOMAIN-SUFFIX,workbuddy.link
+# workbuddy.net 解析到 AWS Global Accelerator（境外 anycast），
+# 之前只靠下面的 keyword 兜底，显式写出来便于以后排查。
+DOMAIN-SUFFIX,workbuddy.net
 # 腾讯云新加坡桶：海外版资源在这里，直连会被解析到境外 CDN
 DOMAIN-SUFFIX,cos.ap-singapore.myqcloud.com
 # 兜底：未收录的 workbuddy / codebuddy 域名一律走代理。
 # 为什么兜底走代理而不是直连：慢一点能忍，打不开不行。
 # 已知国内域名已由 workbuddy-cn.list 在前面接走，不会被这里误伤。
+# 副作用：workbuddy.com / workbuddy.work / workbuddy.slack.com 这类
+# 第三方同名域也会被带进代理。它们都不是真实服务入口，误伤代价小于漏判。
 DOMAIN-KEYWORD,workbuddy
 DOMAIN-KEYWORD,codebuddy

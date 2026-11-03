@@ -168,7 +168,7 @@
 
 ### 3.3 QX：结构已经接近理想，MITM 是最后的破口
 
-- `[filter_local]` 只有 `geoip, cn, direct` 和 `final, 兜底分流`，很好。
+- `[filter_local]` 只有 `geoip, cn, direct` 和 `final, 兜底分流`。**当时判断为"很好"，后来证明是错的**：`filter_local` 先于所有 `filter_remote` 匹配，把 `geoip` 放这里等于让它抢在全部业务分组前面，而且每条连接都要先本地解析一次。2026-11-03 已改为「`filter_local` 只留 `final` + 内联白名单，`geoip` 作为最后一条远程资源」。私有配置里还会把 `direct.txt` 整份内联，问题更严重（见 4.4）。
 - `[filter_remote]` 11 条，带 `force-policy` 和 `update-interval=86400`，很好。
 - `[rewrite_remote]` 26 条，内容自动更新，很好。
 - `[policy]` 9 个组，稳定。
@@ -371,7 +371,7 @@ L3 分发与回读
 
 1. **重写资源自带 hostname**：镜像时把裁剪后的 `hostname = ...` 写进每个 `.conf`/`.snippet`。QX 会合并远程重写资源的 hostname（社区文档与主流订阅都按这个机制工作；上线前需真机验证一次）。
 2. **`[mitm]` 只留本地维护脚本所需的主机**（高德、MissAV、Bloomberg 等），目标 < 30 个；其余全部由重写资源自带。
-3. **`[filter_local]` 只留 `geoip, cn, direct` + `final`**（现在已经是）。
+3. **`[filter_local]` 只留 `final`**（`geoip` 已挪到 `[filter_remote]` 最后一条 `geoip_cn.list`；2026-11-03 已改）。
 4. **`[policy]` 冻结 9 组，预留 2 个空位**（例如 Apple、下载直连），一年内不再改结构。
 5. **节点只走 `[server_remote]`**：节点增减靠订阅，不动配置本体。
 6. **构建输出 `qx/body.sha256`**：`update_qx.sh` 与设备快照比对，只有 body 变了才提示"需要手动导入"。
