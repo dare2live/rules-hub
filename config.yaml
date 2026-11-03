@@ -283,16 +283,16 @@ rewrites:
 
   - id: "amap_clean_script"
     name: "高德内容净化脚本[本地维护]"
-    filename: "amap.trim.js"
+    filename: "amap.trim.v4.js"
     # mirror_only：只把脚本自托管出去，供 AmapBlock.conf 用 script-response-body
     # 引用。它本身不是订阅条目 —— 自包含重写靠头部注释里的 [rewrite_local]
     # 声明块生效，本文件没有那个块，挂成订阅就是提取不到规则的无效条目。
     # 注意：改脚本内容必须换文件名，QX 按 URL 缓存脚本本体，同名改内容设备不重下。
     mirror_only: true
-    local_file: "rewrites/local/amap.trim.js"
+    local_file: "rewrites/local/amap.trim.v4.js"
     opt_parser: true
     enabled: true
-    desc: "高德内容净化脚本（按标题关键字删除卡片，全程异常兜底）"
+    desc: "高德内容净化脚本（按 dataType 整卡删除，全程异常兜底）"
 
   # [已删除 2026-11] 微信小程序去广告@ddgksf2013
   # 结论：无法接着开发，网络层方案对小程序广告无效 —— 这是平台机制不是规则问题。
