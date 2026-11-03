@@ -386,6 +386,15 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
   强制 `--http1.1`、去掉 `Expect: 100-continue`、超时放宽到 60s。
   注意 **Content-Type 只在有 body 时加**：GET `/accounts` 带 `application/octet-stream`
   会被 Cloudflare 判 400（错误码 6003），排查时会误以为是 token 失效。
+- **`取 account id 失败（HTTP 403）` = OAuth token 过期了，不是权限问题**（2026-11）。
+  wrangler 的 OAuth token 写在 `~/Library/Preferences/.wrangler/config/default.toml`，
+  只有约 24 小时有效期。过期后它会先去 `dash.cloudflare.com/oauth2/token` 用
+  refresh_token 换新的 —— **这一步的 fetch 超时同样写死 10s**，网络一抖就失败，
+  于是 wrangler 直接报"非交互环境需要 CLOUDFLARE_API_TOKEN"，
+  而 curl 兜底拿着已过期的 token 打 `/accounts` 就是 403。
+  两件事叠在一起，看起来像"token 被吊销"，实际只是过期 + 刷新没成功。
+  处理：先跑一次 `wrangler whoami` 强制刷新（成功后再看 `expiration_time` 已是新值），
+  再重跑 `publish_private.py`。**不要去建新的 API Token，也不必重新登录。**
 - **WorkBuddy 的分流本质是"按域名 = 按账号"**（2026-11 反编译确认）。
   iOS 上只有一个 App，国内版 / 海外版的区别来自登录账号：服务端登录后下发
   `isOversea` / `endpoint`，客户端据此把 baseUrl 切到 `workbuddy.cn` 或 `workbuddy.ai`。
