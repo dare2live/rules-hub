@@ -114,6 +114,15 @@ cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了
    `script-response-body` 后面的外部 URL 下载镜像到 `dist/qx/rewrites/scripts/`。
    只把 `.conf` 本身自托管是不够的 —— 文件从国内拿得到、它要用的脚本却要回 GitHub 拿，
    就会表现为「某个页面转圈 / 提示网络不畅」。改完要统计残留的外部 URL（注释里的不算）。
+10. **容器是数组还是对象，按上游的遍历方式判断，不能凭直觉**（2026-11 高德 v1 失效根因）。
+    高德的 `cardList` 是 `{key: card}` **对象**，上游用 `Object.values(...).filter(...)` 遍历。
+    我写的脚本只判断 `Array.isArray` 再 `splice`，条件从来没成立过 —— 脚本在跑、也走到了
+    `$done`，但一次都没删，静默无效果。两种都要支持：数组用反向 `splice`，
+    对象先收集 key 再 `delete`（别在遍历中改正在遍历的对象）。
+11. **图片位只能拦请求，改响应体没用**。海报墙 / banner 这类卡片响应里只有图片 URL 和跳转链接，
+    **没有任何文字**，「按标题关键字删卡片」对它永远无效；推荐流（`ai_rec`）同理，
+    上游本来就是 `reject-dict`。遇到「某处广告删不掉」先分清：是有文字的卡片（改响应体）
+    还是纯图片 / 资源位（`reject-dict` 拦接口）。选错处理方式就是白做。
 
 ### 华硕梅林 / fancyss
 
