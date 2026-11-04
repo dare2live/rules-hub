@@ -519,6 +519,14 @@ def build_surge(config, rule_data):
         profile.append(f"{item['key']} = {item['value']}")
     profile.append("")
 
+    # DNS 解析模式：显式 redir-host（基于真实 IP 路由），让 GEOIP,CN 稳定生效，
+    # 国内域名（含政务站）可靠直连。默认 fake-ip 下 GEOIP 对内网/政务 IP 偶发漏判，
+    # 会把国内站送进海外节点（手机 QX 用真实 IP 所以正常，Mac 却漏）。
+    # DNS 防泄漏已由 encrypted-dns-server + hijack-dns 兜底，切 redir-host 不泄。
+    profile.append("[DNS]")
+    profile.append("enhanced-mode = redir-host")
+    profile.append("")
+
     # Proxy：本机用 #!include 引入独立的节点文件，换模板永远不用重加节点
     profile.append("[Proxy]")
     proxy_include = CFG_SURGE_LOCAL.get("proxy_include")
