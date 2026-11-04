@@ -536,13 +536,12 @@ def build_surge(config, rule_data):
     # Proxy Groups
     profile.append("[Proxy Group]")
     # Fallback groups
+    # 关掉后台测速：Surge 没有 Clash 的 lazy 概念，url-test/fallback 必定周期性直连真实 IP。
+    # 自建单节点本来就没有「节点池互相替换」的前提，自动测速纯属给墙发信标，故改成手动 select。
     for fg in config.get("fallback_groups", []):
         g_name = fg["name"]
-        g_type = fg["type"]
         proxies_str = ", ".join(fg["proxies"])
-        url = fg.get("test_url", "http://connectivitycheck.gstatic.com/generate_204")
-        interval = fg.get("interval", 30)
-        profile.append(f"{g_name} = {g_type}, {proxies_str}, url={url}, interval={interval}")
+        profile.append(f"{g_name} = select, {proxies_str}")
     
     profile.append("")
     # Main business policy groups
@@ -624,15 +623,12 @@ def build_qx_policy_block(config, node_tags):
     auto_group = "自动选择"
     has_auto = bool(node_tags)
     if has_auto:
-        # 只用 re.escape 会把空格也转义成 "\ "，QX 的 ICU 正则对未知转义的处理
-        # 不如 Python 宽松，宁可只转义真正的元字符，生成的表达式也更好读。
-        def _esc(tag):
-            return re.sub(r"([\\.^$|?*+()\[\]{}])", r"\\\1", tag)
-
-        safe_tags = "|".join(_esc(t) for t in node_tags)
+        # 关掉后台测速：url-latency-benchmark 会按 check-interval 周期性直连所有真实 IP，
+        # 自建单节点没有「节点池互相替换」的前提，纯属给墙发信标。
+        # 改成 static（手动选择）后，节点照样在组里、照样能手动切，只是不再自动探测。
+        # 与原 user_qx_input.txt 注释里「把 url-latency-benchmark 替换成 static 即可手动选择」一致。
         lines.append(
-            f"url-latency-benchmark=自动选择, server-tag-regex=^({safe_tags})$, "
-            f"check-interval=900, tolerance=0, img-url={QX_ICONS['自动选择']}"
+            f"static=自动选择, {', '.join(node_tags)}, img-url={QX_ICONS['自动选择']}"
         )
 
     for key in order:
@@ -1882,6 +1878,9 @@ def build_clash(config, rule_data):
         L.append("    url: http://cp.cloudflare.com/generate_204")
         L.append(f"    interval: {fg.get('interval', 300)}")
         L.append(f"    tolerance: {fg.get('tolerance', 50)}")
+        # 自建单节点不需要「后台定时测速」：fallback/url-test 会周期性直连真实 IP，
+        # 等于给墙发固定节拍的信标。lazy=true 只在切换到该组时才测一次，平时不探。
+        L.append("    lazy: true")
         L.append("    proxies:")
         for m in fg.get("proxies", []):
             L.append(f"      - {clash_yaml_scalar(m)}")
@@ -2162,6 +2161,9 @@ def generate_personal_clash_config(config, rule_data):
         L.append("    url: http://cp.cloudflare.com/generate_204")
         L.append(f"    interval: {fg.get('interval', 300)}")
         L.append(f"    tolerance: {fg.get('tolerance', 50)}")
+        # 自建单节点不需要「后台定时测速」：fallback/url-test 会周期性直连真实 IP，
+        # 等于给墙发固定节拍的信标。lazy=true 只在切换到该组时才测一次，平时不探。
+        L.append("    lazy: true")
         L.append("    proxies:")
         for m in members:
             L.append(f"      - {clash_yaml_scalar(m)}")
@@ -2207,7 +2209,11 @@ def generate_personal_clash_config(config, rule_data):
         L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
     L.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
     L.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
-    L.append("  - IP-CIDR,REDACTED_IP/32,DIRECT,no-resolve")
+    # 自己的节点服务器直连，不绕道代理（管理/SSH 流量）。
+    # 之前这里硬编码了某一个 Oracle IP，既违反「公开侧不出现节点 IP」的铁律，
+    # 又漏掉了另外两台 VPS。改为从节点清单动态生成，三台一起覆盖，且源码里不再有明文 IP。
+    for _n in nodes:
+        L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
     L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
     L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
     for r in config["rule_sources"]:
