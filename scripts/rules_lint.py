@@ -231,6 +231,8 @@ def build_report(sources, dead, conflicts, expected, stats, dups):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--strict", action="store_true",
+                    help="有策略冲突或文件内重复时返回非 0（CI / ship 闸门）")
     args = ap.parse_args()
 
     config = yaml.safe_load((BASE_DIR / "config.yaml").read_text(encoding="utf-8"))
@@ -257,6 +259,11 @@ def main():
         out = DOCS_DIR / f"RULES_LINT_{stamp}.md"
         out.write_text(report, encoding="utf-8")
         print(f"\n报告已写入 {out.relative_to(BASE_DIR)}")
+    if args.strict and (conflicts or dups):
+        print(f"STRICT FAIL · 策略冲突 {len(conflicts)} / 文件内重复 {len(dups)}")
+        return 1
+    if args.strict:
+        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0")
     return 0
 
 

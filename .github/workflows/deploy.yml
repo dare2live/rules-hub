@@ -44,6 +44,16 @@ jobs:
         run: |
           python generator/build.py
 
+      - name: Rules lint gate (strict)
+        # 冲突 > 0 时阻断发布；检查对象是刚生成的 dist/qx/*.list
+        run: |
+          python scripts/rules_lint.py --no-write --strict
+
+      - name: Privacy guard (HEAD full scan)
+        # 与本地 pre-commit 共用 config/privacy_patterns.txt，避免三处漂移
+        run: |
+          sh scripts/precommit_guard.sh --all
+
       - name: Audit upstream health (read-only)
         # 只观测，不产出给设备的文件；失败不阻塞构建与发布。
         continue-on-error: true

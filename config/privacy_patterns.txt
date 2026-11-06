@@ -1,0 +1,60 @@
+# ============================================================================
+# privacy_patterns.txt —— 三层隐私守卫共用的唯一规则源
+# ----------------------------------------------------------------------------
+# 用法：scripts/precommit_guard.sh 读它；pre-commit / CI / ship 都调同一份脚本，
+#       避免三处规则漂移。命中即拒绝，输出只给「文件:行号:规则名」，值一律打码。
+#
+# 格式：段落头 [section]，其后每行一条；# 开头与空行忽略。
+#   [bad_path]   路径命中即拒绝（Python re，忽略大小写）
+#   [skip_path]  这些路径不做内容扫描（公开文档/规则数据，含大量公共 DNS IP）
+#   [skip_line]  这些行不做 IP 检查（表格、IP-CIDR 规则等语法行）
+#   [allow_ip]   这些 IP 即使「公网可路由」也不算真节点 IP
+#   [regex]      内容正则（Python re，忽略大小写）；命中即拒绝
+# 注意：正则由 Python re 解释，不是 grep ERE；用 \s / \d，别写 POSIX 字符类。
+# ============================================================================
+
+[bad_path]
+(^|/)\.private/
+(^|/)user_qx_input\.txt$
+(^|/)site\.ya?ml$
+(^|/).*Personal.*\.(conf|yaml|yml)$
+(^|/)\.env(\.|$)
+(^|/).*\.local\.md$
+(^|/)id_(rsa|ed25519|ecdsa)$
+(^|/).*\.p12$
+
+[skip_path]
+^data/
+^dist/
+^docs/
+^backups/
+^\.github/
+^README\.md$
+
+[skip_line]
+^\s*IP-CIDR
+^\s*\|
+^\s*#
+REPLACE_ME
+^\s*(L|lines)\.append\(f"
+
+[allow_ip]
+114.114.114.114
+114.114.115.115
+223.5.5.5
+223.6.6.6
+119.29.29.29
+8.8.8.8
+8.8.4.4
+1.1.1.1
+1.0.0.1
+9.9.9.9
+208.67.222.222
+208.67.220.220
+1.2.3.4
+
+[regex]
+(password|passwd|pwd|secret|api[_-]?key|api[_-]?token|bot[_-]?token|access[_-]?token|auth[_-]?token)\s*[:=]\s*['"]?[^\s#'"]{6,}
+\$2[aby]\$\d{2}\$[./A-Za-z0-9]{20,}
+-----BEGIN([ A-Z]*)PRIVATE KEY-----
+\buuid\s*[:=]\s*['"]?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}

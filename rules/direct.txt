@@ -215,7 +215,7 @@ DOMAIN-SUFFIX,cdntip.com
 DOMAIN-SUFFIX,chinanetcenter.com
 
 # 统计 / 推送（走代理只会更慢）
-DOMAIN-SUFFIX,umeng.com
+# P0（用户裁定 B）：友盟由 reject 源按 REJECT 处理；此处不再声明直连，避免策略冲突。
 DOMAIN-SUFFIX,cnzz.com
 DOMAIN-SUFFIX,growingio.com
 DOMAIN-SUFFIX,talkingdata.com

@@ -1938,7 +1938,7 @@ def build_clash(config, rule_data):
     L.append("  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。")
     L.append("  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve")
     L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
-    L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
+    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
 
     L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
     for r in config["rule_sources"]:
@@ -2223,7 +2223,7 @@ def generate_personal_clash_config(config, rule_data):
     for _n in nodes:
         L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
     L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
-    L.append("  - DOMAIN,sharewithyou.dpdns.org,DIRECT")
+    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
     for r in config["rule_sources"]:
         if r.get("type") == "GEOIP":
             L.append(f"  - GEOIP,{r.get('country', 'CN')},{r['target']}")

@@ -164,8 +164,8 @@ rule_sources:
     desc: "防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权）"
 
   # 广告规则里唯一「必须排在业务直连之前」的一组，理由见 rules/adblock-cn.txt 头部。
-  # 上游 reject 排在 custom_direct 之后，qq.com / baidu.com 会把广点通和百度联盟
-  # 提前放行成 DIRECT —— 那就是 2026-11 小蚁摄像机弹窗拦不住的原因之一。
+  # 上游 reject 已于 P0 提前到 adblock_intl 之后；本组仍须排在业务直连之前，
+  # 否则 qq.com / baidu.com 会把广点通和百度联盟提前放行成 DIRECT。
   - id: "adblock_cn"
     target: "REJECT"
     file: "rules/adblock-cn.txt"
@@ -184,6 +184,16 @@ rule_sources:
     target: "REJECT"
     file: "rules/adblock-intl.txt"
     desc: "国际广告交易平台（The Trade Desk / Xandr / Criteo / Ad Manager）"
+
+  # P0 结构性修复：上游广告大库必须排在大范围直连兜底之前。
+  # 原先 reject 在 custom_direct 之后，qq.com/baidu.com 等大后缀把 57 条
+  # 广告规则提前放行成 DIRECT（规则还在、产物里没有、也不报错）。
+  - id: "reject"
+    target: "REJECT"
+    file: "rules/reject.txt"
+    desc: "广告与数据分析追踪"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Advertising/Advertising.list"
 
   - id: "claude"
     target: "Claude"
@@ -261,13 +271,6 @@ rule_sources:
     target: "DIRECT"
     file: "rules/direct.txt"
     desc: "个人专属项目直连、微信、企业微信、国内银行"
-
-  - id: "reject"
-    target: "REJECT"
-    file: "rules/reject.txt"
-    desc: "广告与数据分析追踪"
-    upstream_urls:
-      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Advertising/Advertising.list"
 
   - id: "china_geoip"
     target: "DIRECT"
