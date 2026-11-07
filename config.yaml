@@ -26,105 +26,112 @@ policies:
     type: "direct"
     desc: "国内直连（微信、企业微信、钉钉、国内银行、内网）"
 
+  # 2026-11-07 用户定稿规则：
+  #   · 每个 select 组都保留 Proxy、DIRECT、三个 VPS 节点（Lightsail Singapore / Oracle San Jose / Google Oregon）作为选项；
+  #   · 默认值全部显式配置（qx_default 驱动 QX，default_select 驱动 Surge/Clash）；
+  #   · Claude、WorkBuddy AI 固定新加坡；GoogleAI/OpenAI 美区优先；Proxy/Media 新加坡优先。
+
   - name: "Claude"
     type: "select"
-    desc: "Claude 专属通道（锁定新加坡）"
-    # QX 侧默认选中项（成员列表第一个）
+    desc: "Claude 专属通道（固定新加坡）"
     qx_default: "Lightsail Singapore"
-    default_select: "🇸🇬 新加坡自动备用"
+    default_select: "Lightsail Singapore"
     proxies:
-      - "Lightsail Singapore HY2"
       - "Lightsail Singapore"
+      - "Oracle San Jose"
+      - "Google Oregon"
+      - "Lightsail Singapore HY2"
       - "🇸🇬 新加坡自动备用"
+      - "Proxy"
+      - "DIRECT"
 
   - name: "GoogleAI"
     type: "select"
-    desc: "Gemini / Antigravity 专属通道（美区优选/新加坡，杜绝香港）"
-    # QX 侧默认选中项（成员列表第一个）
-    qx_default: "proxy"
+    desc: "Gemini / Antigravity 专属通道（美区优选，杜绝香港）"
+    qx_default: "Google Oregon"
     default_select: "🇺🇸 美国自动优选"
     proxies:
+      - "Google Oregon"
+      - "Oracle San Jose"
       - "🇺🇸 美国自动优选"
       - "🇸🇬 新加坡自动备用"
-      - "Oracle San Jose"
+      - "Lightsail Singapore"
       - "Lightsail Singapore HY2"
       - "Proxy"
+      - "DIRECT"
 
   - name: "OpenAI"
     type: "select"
     desc: "ChatGPT / Codex 专属通道（锁定美区，OpenAI 对新加坡出口风控更严）"
-    # QX 侧默认选中项（成员列表第一个）
-    qx_default: "proxy"
+    qx_default: "Google Oregon"
     default_select: "🇺🇸 美国自动优选"
     proxies:
-      - "🇺🇸 美国自动优选"
-      - "Oracle San Jose"
       - "Google Oregon"
+      - "Oracle San Jose"
+      - "🇺🇸 美国自动优选"
       - "🇸🇬 新加坡自动备用"
+      - "Lightsail Singapore"
+      - "Lightsail Singapore HY2"
+      - "Proxy"
+      - "DIRECT"
 
-  # 策略组名与腾讯侧产品名保持一致：
-  #   WorkBuddy     = 国内版（workbuddy.cn，腾讯云国内账号 / 企微登录）
-  #   WorkBuddy AI  = 海外版（workbuddy.ai，Google / GitHub / X / OneID 邮箱登录）
-  # iOS 上是同一个 App，按登录账号切换后端域名，所以「按域名分流」就是「按账号分流」。
   - name: "WorkBuddy"
     type: "select"
     desc: "WorkBuddy 国内版（workbuddy.cn / codebuddy.cn / copilot.tencent.com），默认直连"
-    # QX 侧默认选中项（成员列表第一个）
     qx_default: "DIRECT"
     default_select: "DIRECT"
     proxies:
       - "DIRECT"
+      - "Lightsail Singapore"
+      - "Oracle San Jose"
+      - "Google Oregon"
       - "🇸🇬 新加坡自动备用"
+      - "Proxy"
 
   - name: "WorkBuddy AI"
     type: "select"
-    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），默认直连"
-    # 默认直连，不是走新加坡。
-    #
-    # 2026-11-03 实测结论（先 Mac 取证，再手机 A/B）：
-    #   · Mac 上国内版客户端近 200 条请求里 **0 条** .ai，
-    #     只连 www.workbuddy.cn / static.workbuddy.cn / galileotelemetry.tencent.com，
-    #     全部命中 WorkBuddy → DIRECT，DNS 由 doh.pub / alidns 解到国内 IP。
-    #   · 手机上把这一组切到 direct，海外版立刻变快。
-    # 原因：workbuddy.ai 的 CNAME 是 *.eo.dnse2.com（腾讯 EdgeOne），
-    # 本身就是按来源做就近调度的；绕新加坡等于把就近调度废掉，
-    # 还多一跳回国。所以这里直连最快。
-    #
-    # 保留「🇸🇬 新加坡自动备用 / Lightsail Singapore」两个成员：
-    # 哪天 EdgeOne 调度出问题，在 QX 里手切一下就能验证，不用重新导入。
-    qx_default: "DIRECT"
-    default_select: "DIRECT"
+    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），固定新加坡"
+    # 2026-11-07 用户定稿：改固定新加坡（此前 11-03 结论是 EdgeOne 就近调度直连最快，
+    # 保留注释：如 EdgeOne 调度异常可在组内手切 DIRECT 验证，无需重新导入）。
+    qx_default: "Lightsail Singapore"
+    default_select: "Lightsail Singapore"
     proxies:
-      - "DIRECT"
-      - "🇸🇬 新加坡自动备用"
-      # QX 里没有 fallback 组（那是 Surge 的写法），要能手切就必须直接列出节点
       - "Lightsail Singapore"
+      - "Oracle San Jose"
+      - "Google Oregon"
+      - "🇸🇬 新加坡自动备用"
+      - "Lightsail Singapore HY2"
       - "Proxy"
+      - "DIRECT"
 
   - name: "Proxy"
     type: "select"
-    desc: "全球通用外网加速（X、GitHub、Google 搜索）"
-    # QX 侧默认选中项（成员列表第一个）
-    qx_default: "proxy"
+    desc: "全球通用外网加速（X、GitHub、Google 搜索），新加坡优先"
+    qx_default: "Lightsail Singapore"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
-      - "🇸🇬 新加坡自动备用"
-      - "🇺🇸 美国自动优选"
-      - "Lightsail Singapore HY2"
+      - "Lightsail Singapore"
       - "Oracle San Jose"
       - "Google Oregon"
-      - "Lightsail Singapore"
+      - "Lightsail Singapore HY2"
+      - "🇸🇬 新加坡自动备用"
+      - "🇺🇸 美国自动优选"
+      - "DIRECT"
 
   - name: "Media"
     type: "select"
-    desc: "国际流媒体（YouTube、Netflix、Spotify）"
-    # QX 侧默认选中项（成员列表第一个）
-    qx_default: "proxy"
+    desc: "国际流媒体（YouTube、Netflix、Spotify），新加坡优先"
+    qx_default: "Lightsail Singapore"
     default_select: "🇸🇬 新加坡自动备用"
     proxies:
+      - "Lightsail Singapore"
+      - "Oracle San Jose"
+      - "Google Oregon"
+      - "Lightsail Singapore HY2"
       - "🇸🇬 新加坡自动备用"
       - "🇺🇸 美国自动优选"
       - "Proxy"
+      - "DIRECT"
 
   - name: "REJECT"
     type: "reject"
@@ -262,7 +269,9 @@ rule_sources:
   - id: "proxy"
     target: "Proxy"
     file: "rules/proxy.txt"
-    desc: "通用海外常用站点（弥补老旧 GFWList 缺失的现代海外站点与 Stremio 详情页海报）"
+    desc: "通用海外常用站点（融合上游 Google 全生态 + 现代海外站点与 Stremio 详情页海报）"
+    upstream_urls:
+      - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Google/Google.list"
 
   # 放在业务列表之后：这里是大范围直连兜底（腾讯 / 阿里 / 字节 / 银行…），
   # 只有前面没有更具体的业务规则时才由它接管。

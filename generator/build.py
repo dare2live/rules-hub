@@ -557,7 +557,7 @@ def build_surge(config, rule_data):
         p_name = p["name"]
         p_type = p["type"]
         if p_type == "select":
-            members = list(p["proxies"])
+            members = [m for m in p["proxies"] if m != p_name]
             # 每个组末尾都补上 Proxy 与 DIRECT，和 QX 侧一致：
             # 不补的话想临时把某个组切成直连，客户端里根本没这个选项，
             # 只能回来改配置重新生成 —— 那正是「每次更新都得手工调整」的来源。
@@ -565,6 +565,10 @@ def build_surge(config, rule_data):
             for builtin in ("Proxy", "DIRECT"):
                 if builtin != p_name and builtin not in members:
                     members.append(builtin)
+            default_sel = p.get("default_select")
+            if default_sel and default_sel != p_name and default_sel in members:
+                members.remove(default_sel)
+                members.insert(0, default_sel)
             profile.append(f"{p_name} = select, {', '.join(members)}")
     profile.append("")
     
@@ -643,8 +647,11 @@ def build_qx_policy_block(config, node_tags):
         p = policies.get(key)
         if not p:
             continue
+        name = names[key]
         members = []
         for m in p.get("proxies", []):
+            if m == key:
+                continue
             mu = str(m).upper()
             if mu == "DIRECT":
                 mm = "direct"
@@ -655,6 +662,8 @@ def build_qx_policy_block(config, node_tags):
             elif m in node_set:
                 mm = m
             else:
+                continue
+            if mm == name:
                 continue
             if mm not in members:
                 members.append(mm)
@@ -1418,6 +1427,16 @@ def generate_personal_qx_config(config, produced=None):
             if tag and tag not in node_tags:
                 node_tags.append(tag)
 
+    # 节点改成订阅后，server_local 里没有 tag 了：把私有订阅的节点名并入 node_tags，
+    # 否则策略组会把所有节点成员过滤掉（Claude 组塌缩成 proxy/direct，默认落进 Proxy 组）。
+    # hysteria2 不在 QX 订阅列表里，必须剔除，否则 QX 导入时报 unknown policy。
+    try:
+        for _n in parse_nodes_for_clash():
+            if _n.get("type") != "hysteria2" and _n.get("name") and _n["name"] not in node_tags:
+                node_tags.append(_n["name"])
+    except Exception:
+        pass
+
     # 清理临时免费订阅（tag 含「临时」），避免几十个杂节点污染节点列表
     cleaned_remote = []
     dropped = 0
@@ -1443,7 +1462,7 @@ def generate_personal_qx_config(config, produced=None):
     p.append(f"# 节点: {', '.join(node_tags) if node_tags else '(未检测到 server_local 节点)'}")
     p.append(f"# 说明: 已内嵌真实节点、MITM 证书与口令；分流与重写走自建订阅，日常无需改配置")
     p.append("# 本次关键修复: 业务规则（WorkBuddy / WorkBuddy AI）不再被内联直连规则压掉；")
-    p.append("#               geoip 兜底移到 filter_remote 最后一条；WorkBuddy AI 默认直连")
+    p.append("#               geoip 兜底移到 filter_remote 最后一条；WorkBuddy AI 固定新加坡（2026-11-07 用户定稿）")
     p.append("")
 
     p.append("[general]")
@@ -1937,7 +1956,7 @@ def build_clash(config, rule_data):
     L.append("  # 把「代理服务器自己的公网 IP」也放进直连，避免流量绕回自己形成环路。")
     L.append("  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。")
     L.append("  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve")
-    L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
 
     L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
@@ -2222,7 +2241,7 @@ def generate_personal_clash_config(config, rule_data):
     # 又漏掉了另外两台 VPS。改为从节点清单动态生成，三台一起覆盖，且源码里不再有明文 IP。
     for _n in nodes:
         L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
-    L.append("  - DOMAIN-SUFFIX,lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
     for r in config["rule_sources"]:
         if r.get("type") == "GEOIP":
@@ -2301,7 +2320,7 @@ def build_private_node_subs():
     (PRIVATE_DIR / "nodes.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # 2) 通用分享链接（base64 包裹），QX / Surge / Shadowrocket / v2rayN 都能吃
-    uris = [u for u in (_node_to_uri(n) for n in nodes) if u]
+    uris = [u for u in (_node_to_uri(n) for n in nodes if n["type"] != "hysteria2") if u]  # QX 列表剔除 hysteria2（老版本 QX 不支持）
     blob = base64.b64encode("\n".join(uris).encode()).decode()
     (PRIVATE_DIR / "nodes.txt").write_text(blob + "\n", encoding="utf-8")
 
@@ -2442,49 +2461,71 @@ def main():
                 immunity_set.add(d)
 
     # 3. Process each rule source: merge local + upstream, normalize, deduplicate & filter
+    def _rule_matches_value(prev_type, prev_val, cur_val):
+        if prev_type == "DOMAIN":
+            return cur_val == prev_val
+        if prev_type == "DOMAIN-SUFFIX":
+            return cur_val == prev_val or cur_val.endswith("." + prev_val)
+        if prev_type == "DOMAIN-KEYWORD":
+            return prev_val in cur_val
+        return False
+
+    prior_domain_rules = []  # [(rtype, val, source_id)] from earlier non-unbreak rule sources
     rule_data = {}
     for r in config["rule_sources"]:
         if "file" not in r:
             continue
         rel_path = r["file"]
+        r_id = r["id"]
         is_reject = (r.get("target") == "REJECT")
         
         # Local lines first (highest priority)
-        raw_lines = list(local_data.get(rel_path, []))
-        local_count = len(raw_lines)
+        local_lines = list(local_data.get(rel_path, []))
+        local_count = len(local_lines)
+        raw_lines = [(ln, False) for ln in local_lines]
         
         # Upstream lines (if specified)
         upstreams = r.get("upstream_urls", [])
         if upstreams:
-            print(f"🌐 Fetching {len(upstreams)} upstream source(s) for [{r['id']}]...")
+            print(f"🌐 Fetching {len(upstreams)} upstream source(s) for [{r_id}]...")
             for u in upstreams:
                 u_lines = fetch_upstream(u)
-                raw_lines.extend(u_lines)
+                raw_lines.extend((ln, True) for ln in u_lines)
 
-        # Normalize, deduplicate & apply immunity protection
+        # Normalize, deduplicate & apply immunity / upstream shadowing protection
         seen = set()
+        seen_domain_rules = []
         clean_lines = []
-        for line in raw_lines:
+        for line, is_upstream in raw_lines:
             norm = normalize_rule(line)
             if not norm or norm in seen:
                 continue
             
+            parts = [p.strip() for p in norm.split(",")]
+            rtype = parts[0].upper() if len(parts) >= 2 else ""
+            dval = parts[1].lower() if len(parts) >= 2 and rtype in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD") else None
+
             # Immunity protection: NEVER let upstream advertising block user whitelist or direct domains
-            #
-            # skip_immunity：给「精确到广告子域」的规则源开的口子。
-            # direct.txt 里有 qq.com / baidu.com 这类大后缀，默认豁免会连带放行
-            # mi.gdt.qq.com（广点通）、mobads.baidu.com（百度联盟）——
-            # 2026-11 小蚁摄像机弹窗拦不住就是这个原因：规则写了，构建期被删了，
-            # 而且不报错（只在条数上少两条）。
-            # 只对该源放行，全局豁免仍然生效。
             if is_reject and not r.get("skip_immunity"):
                 d = extract_domain(norm)
                 if d and (d in immunity_set or any(d.endswith("." + imm) for imm in immunity_set)):
                     continue
+
+            # Upstream pool filtering: skip upstream rules (or broader rules) already covered by earlier lists or earlier rules in the same list
+            if dval:
+                if any(_rule_matches_value(pt, pv, dval) for pt, pv in seen_domain_rules):
+                    continue
+                if is_upstream and any(_rule_matches_value(pt, pv, dval) for pt, pv, _sid in prior_domain_rules):
+                    continue
+                seen_domain_rules.append((rtype, dval))
                     
             seen.add(norm)
             clean_lines.append(norm)
             
+        if r_id != "unbreak":
+            for rt, dv in seen_domain_rules:
+                prior_domain_rules.append((rt, dv, r_id))
+
         rule_data[rel_path] = clean_lines
         diff = len(clean_lines) - local_count
         if diff > 0:

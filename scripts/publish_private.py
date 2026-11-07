@@ -100,7 +100,7 @@ def cf_api(method, url, token, data=None, timeout=60):
     强制 HTTP/1.1 并去掉 Expect: 100-continue（弱网下这两样都会卡），
     超时放宽到 60s。
     """
-    cmd = ["curl", "-s", "--http1.1", "-H", "Expect:",
+    cmd = ["/usr/bin/curl", "-s", "--http1.1", "-H", "Expect:",
            "-m", str(timeout), "-X", method,
            "-H", f"Authorization: Bearer {token}",
            "-w", "\n%{http_code}"]
@@ -137,18 +137,22 @@ def kv_put(namespace_id, key, path):
         "--namespace-id", namespace_id,
         "--remote",
     ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    if r.returncode == 0:
-        return True, ""
-    # wrangler 超时/连不上时，换 curl 直连（见 cf_api 注释）
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if r.returncode == 0:
+            return True, ""
+        err_msg = (r.stderr or r.stdout or "").strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        err_msg = str(e)
+    # wrangler 超时/连不上或不在 PATH 时，换 curl 直连（见 cf_api 注释）
     token = read_oauth_token()
     if token:
         ok, err = kv_put_curl(namespace_id, key, path, token)
         if ok:
-            print(f"   ↳ wrangler 超时，已用 curl 直连写入 [{key}]")
+            print(f"   ↳ 已用 curl API 写入 [{key}]")
             return True, ""
-        return False, f"{err}（wrangler: {(r.stderr or r.stdout or '').strip().splitlines()[-1:] or ['?']}）"
-    tail = (r.stderr or r.stdout or "").strip().splitlines()[-4:]
+        return False, f"{err}（wrangler: {err_msg.splitlines()[-1:] or ['?']}）"
+    tail = err_msg.splitlines()[-4:]
     return False, " / ".join(tail)
 
 
