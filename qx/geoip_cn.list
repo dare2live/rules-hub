@@ -1,0 +1,7 @@
+# 国内 IP 兜底直连（Quantumult X）
+# Source: Rules Hub
+#
+# 必须排在 [filter_remote] 的最后一条：它的作用是「前面都没命中时」，
+# 而不是「优先判断」。放到前面会架空前后的所有业务分组。
+
+geoip, cn, direct

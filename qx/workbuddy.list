@@ -1,0 +1,11 @@
+# WorkBuddy AI 海外版（.ai / .cc / .link），默认直连 (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,workbuddy.ai,WorkBuddy AI
+HOST-SUFFIX,codebuddy.ai,WorkBuddy AI
+HOST-SUFFIX,workbuddy.cc,WorkBuddy AI
+HOST-SUFFIX,workbuddy.link,WorkBuddy AI
+HOST-SUFFIX,workbuddy.net,WorkBuddy AI
+HOST-SUFFIX,cos.ap-singapore.myqcloud.com,WorkBuddy AI
+HOST-KEYWORD,workbuddy,WorkBuddy AI
+HOST-KEYWORD,codebuddy,WorkBuddy AI

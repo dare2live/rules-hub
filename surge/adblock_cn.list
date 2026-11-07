@@ -1,0 +1,18 @@
+# 国产广告联盟 / 广告 SDK / 监测（小蚁摄像机实测，排在业务直连之前才生效）
+# Source: Rules Hub
+
+DOMAIN-SUFFIX,fancyapi.com
+DOMAIN-SUFFIX,fancysdsp.com
+DOMAIN-SUFFIX,dmrtb.com
+DOMAIN-SUFFIX,66mobi.com
+DOMAIN-SUFFIX,leadmoad.com
+DOMAIN-SUFFIX,xiawan8.com
+DOMAIN-SUFFIX,medproad.com
+DOMAIN-SUFFIX,ydmob.com
+DOMAIN-SUFFIX,adprod.cn
+DOMAIN-SUFFIX,divms.cn
+DOMAIN,mi.gdt.qq.com
+DOMAIN-SUFFIX,mobads.baidu.com
+DOMAIN,g.cn.miaozhen.com
+DOMAIN,t.dentsuchina.cn
+DOMAIN-SUFFIX,zhangyuyidong.cn

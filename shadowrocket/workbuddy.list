@@ -1,0 +1,10 @@
+# WorkBuddy AI 海外版（.ai / .cc / .link），默认直连 (Shadowrocket)
+
+DOMAIN-SUFFIX,workbuddy.ai
+DOMAIN-SUFFIX,codebuddy.ai
+DOMAIN-SUFFIX,workbuddy.cc
+DOMAIN-SUFFIX,workbuddy.link
+DOMAIN-SUFFIX,workbuddy.net
+DOMAIN-SUFFIX,cos.ap-singapore.myqcloud.com
+DOMAIN-KEYWORD,workbuddy
+DOMAIN-KEYWORD,codebuddy

@@ -1,0 +1,32 @@
+# Gemini / Antigravity / Google Cloud Code (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,gemini.google.com,GoogleAI
+HOST-SUFFIX,gemini.google,GoogleAI
+HOST-SUFFIX,generativeai.google,GoogleAI
+HOST-SUFFIX,aistudio.google.com,GoogleAI
+HOST-SUFFIX,makersuite.google.com,GoogleAI
+HOST-SUFFIX,deepmind.google,GoogleAI
+HOST-SUFFIX,deepmind.com,GoogleAI
+HOST-SUFFIX,antigravity.google,GoogleAI
+HOST-SUFFIX,antigravity-unleash.goog,GoogleAI
+HOST-SUFFIX,cloudcode-pa.googleapis.com,GoogleAI
+HOST-SUFFIX,generativelanguage.googleapis.com,GoogleAI
+HOST-SUFFIX,proactivebackend-pa.googleapis.com,GoogleAI
+HOST-SUFFIX,aida.googleapis.com,GoogleAI
+HOST-SUFFIX,aisandbox-pa.googleapis.com,GoogleAI
+HOST-SUFFIX,geller-pa.googleapis.com,GoogleAI
+HOST-SUFFIX,play.googleapis.com,GoogleAI
+HOST-SUFFIX,bard.google.com,GoogleAI
+HOST-SUFFIX,notebooklm.google,GoogleAI
+HOST-SUFFIX,notebooklm.google.com,GoogleAI
+HOST,daily-cloudcode-pa.googleapis.com,GoogleAI
+HOST,robinfrontend-pa.googleapis.com,GoogleAI
+HOST,alkalicore-pa.clients6.google.com,GoogleAI
+HOST,alkalimakersuite-pa.clients6.google.com,GoogleAI
+HOST,ai.google.dev,GoogleAI
+HOST,makersuite.google.com,GoogleAI
+HOST-SUFFIX,apis.google.com,GoogleAI
+HOST-KEYWORD,colab,GoogleAI
+HOST-KEYWORD,developerprofiles,GoogleAI
+HOST-KEYWORD,generativelanguage,GoogleAI

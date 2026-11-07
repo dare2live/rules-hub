@@ -1,0 +1,37 @@
+# 防误杀白名单（最高优先级，对所有上游广告规则具备一票豁免权） (Quantumult X)
+# Source: Rules Hub
+
+HOST,cctv.lifehackers.cc,direct
+HOST,app.adjust.com,direct
+HOST,analytics.slashdotmedia.com,direct
+HOST,app.appsflyer.com,direct
+HOST-SUFFIX,apple.com,direct
+HOST-SUFFIX,icloud.com,direct
+HOST-SUFFIX,crashlytics.com,direct
+HOST-SUFFIX,byd.com,direct
+HOST-SUFFIX,byd.com.cn,direct
+HOST-SUFFIX,bydauto.com,direct
+HOST-SUFFIX,bydauto.com.cn,direct
+HOST-SUFFIX,bydauto.cn,direct
+HOST-SUFFIX,bydauto.net,direct
+HOST-SUFFIX,bydcloud.com,direct
+HOST-SUFFIX,byd-auto.net,direct
+HOST-SUFFIX,bydclub.com,direct
+HOST-SUFFIX,bydcare.com,direct
+HOST-SUFFIX,bydsemi.com,direct
+HOST-SUFFIX,bydit.com,direct
+HOST-SUFFIX,bydonline.com,direct
+HOST-SUFFIX,bydowstar.com,direct
+HOST-SUFFIX,bydenergy.com,direct
+HOST-SUFFIX,bydservice.com,direct
+HOST-SUFFIX,bydservice.com.cn,direct
+HOST-SUFFIX,bydglobal.com,direct
+HOST-SUFFIX,bydmobile.com,direct
+HOST-SUFFIX,bydlife.com,direct
+HOST-SUFFIX,bydfin.com,direct
+HOST-SUFFIX,dilink.com,direct
+HOST-SUFFIX,diplus.cn,direct
+HOST-KEYWORD,bydauto,direct
+HOST-KEYWORD,bydcloud,direct
+HOST-KEYWORD,bydservice,direct
+HOST-KEYWORD,byd,direct
