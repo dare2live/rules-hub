@@ -88,6 +88,7 @@ MITM_DENY_EXACT = set(CFG_MITM["deny_exact"])
 
 def _expand_alternation(host):
     """展开 (a|b|c) 形式的简单交替组，最多 16 种。"""
+    host = host.replace("(?:", "(")
     m = re.search(r"\(([^()]*\|[^()]*)\)", host)
     if not m:
         return [host]
@@ -162,12 +163,17 @@ def derive_mitm_hostnames(paths):
             m = re.match(r"^\(?(\^)?https\??:\\?/\\?/(.*)$", left)
             if not m:
                 continue
-            rest = m.group(2)
+            rest = m.group(2).replace("(?:", "(")
             m_sep = re.search(r"\\?/|\\?\?|\$", rest)
             raw = rest[:m_sep.start()] if m_sep else rest
             raw = re.sub(r"\(:\d+\)\??$", "", raw)
-            for item in _expand_alternation(raw):
-                hosts.update(_host_to_mitm(item))
+            candidates = [raw]
+            for m_sub in re.finditer(r"(?:\([A-Za-z0-9.\-\|]+\)|[A-Za-z0-9\-]+)(?:\\\.[A-Za-z0-9\-]+)+(?=\\?/)", rest):
+                candidates.append(m_sub.group(0))
+            for cand in candidates:
+                cand = cand.lstrip("(")
+                for item in _expand_alternation(cand):
+                    hosts.update(_host_to_mitm(item))
 
     hosts = {h for h in hosts if mitm_allowed(h)}
     hosts -= MITM_DENY_EXACT
@@ -1226,9 +1232,9 @@ def build_rewrites(config):
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
         produced.add(fn)
-        # 兼容尚未重新导入主配置、仍在请求旧文件名 missav.clean.js / missav.clean.v3.js 的设备
+        # 兼容尚未重新导入主配置、仍在请求旧文件名 missav.clean.js / missav.clean.v3.js / missav.clean.v4.js 的设备
         if rw_id == "missav":
-            for legacy_fn in ("missav.clean.js", "missav.clean.v3.js"):
+            for legacy_fn in ("missav.clean.js", "missav.clean.v3.js", "missav.clean.v4.js"):
                 if fn != legacy_fn:
                     with open(rw_dist / legacy_fn, "w", encoding="utf-8") as out_legacy:
                         out_legacy.write(content)
@@ -1238,7 +1244,13 @@ def build_rewrites(config):
             hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
             for hn_str in hn_matches:
                 for h in hn_str.split(","):
-                    h = h.strip()
+                    h = re.sub(r":443$", "", h.strip())
+                    h = {
+                        "*.kuwo.*": "*.kuwo.cn",
+                        "*.xmcdn.*": "*.xmcdn.com",
+                        "*.flyert.*": "*.flyert.com",
+                        "api-access.pangolin-sdk-toutiao.*com": "api-access.pangolin-sdk-toutiao.com",
+                    }.get(h, h)
                     if h:
                         all_hostnames.add(h)
                     
@@ -1308,7 +1320,36 @@ def build_rewrites(config):
     for st_line in build_qx_selftest_rules(base_url):
         aio_rewrites.append(st_line)
 
-    for rw in rewrites:
+    # Clash (ProjectClash/Clash-Client) 的 ModuleStore.scriptDownloadsPerScan = 32 限制单次扫描最多下载 32 个脚本：
+    # 1) 将专属核心重写（高德净化、波点音乐、MissAV、油管、微博、小红书、Spotify 等）排在最前面，
+    #    确保在任何扫描周期都拥有最高下载优先级；
+    # 2) 将 StartUpAds.conf 中实为 $done({body:'{}'}) 的 24982b14-dict.js 还原为原生 url reject-dict（零脚本开销）；
+    # 3) 过滤 StartUpAds.conf 中属于 deny_suffix 不解密域名（12306 / 农行）或无固定域名的低频脚本，
+    #    使整份模块脚本总数严格控制在 <= 30 个（单次更新即可 100% 全部拉齐）。
+    priority_first = {"amap_block": 0, "bodian_music": 1, "missav": 2}
+    ordered_rewrites = sorted(
+        rewrites,
+        key=lambda r: (
+            2 if r.get("id") == "startup_ads" else (0 if r.get("id") in priority_first else 1),
+            priority_first.get(r.get("id"), 99),
+        ),
+    )
+    startup_skip_scripts = (
+        "2cafacd1-12306.js",      # 12306 在 deny_suffix 中，不启用 MITM
+        "aa1b97a8-abchina.js",    # 农行在 deny_suffix 中，不启用 MITM
+        "921a9f67-555Ad.js",      # 泛域名正则，无固定 MITM 域名
+        "f8819501-amdc.js",       # 纯 HTTP 泛域名正则
+        "114f6be7-ahfs.js",
+        "43ded1c2-baidumap.js",   # 仅用高德地图，无需 80KB 百度地图脚本
+        "7b3e1f97-baishitv.js",
+        "335806cb-caixinads.js",
+        "6cd2386c-fly.js",
+        "b1a7e736-pupumarket.js",
+        "2112519e-qidian.js",
+        "37243d04-stay.js",
+    )
+
+    for rw in ordered_rewrites:
         if not rw.get("enabled", True) or rw.get("mirror_only", False):
             continue
         fn = rw["filename"]
@@ -1337,6 +1378,10 @@ def build_rewrites(config):
             elif " url " in s or " url-and-header " in s or "\turl " in s:
                 if re.match(r"^\^https\?:\\/\\/20\d\d\.\d\d\.\d\d\/", s):
                     continue  # 跳过上游 StartUpAds.conf 伪装成规则的版本号水印行
+                if "24982b14-dict.js" in s:
+                    s = re.sub(r"\burl\s+script-response-body\s+\S+24982b14-dict\.js", "url reject-dict", s)
+                if rw.get("id") == "startup_ads" and any(sk in s for sk in startup_skip_scripts):
+                    continue
                 rw_lines.append(s)
 
         if rw_lines:
@@ -1375,8 +1420,12 @@ def build_rewrites(config):
         "",
     ])
 
+    aio_text = "\n".join(aio) + "\n"
     with open(rw_dist / "all.conf", "w", encoding="utf-8") as f:
-        f.write("\n".join(aio) + "\n")
+        f.write(aio_text)
+    CLASH_DIST.mkdir(parents=True, exist_ok=True)
+    with open(CLASH_DIST / "module.conf", "w", encoding="utf-8") as f:
+        f.write(aio_text)
     return produced
 
 

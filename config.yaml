@@ -450,15 +450,16 @@ rewrites:
 
   - id: "missav"
     name: "MissAV"
-    filename: "missav.clean.v4.js"
-    # 回归上游 ddgksf2013 (V1.0.6) 的极简架构（纯 CSS + window.open 拦截），
-    # 补齐当前广告域名与 div.fixed.right-2.bottom-2 右下角浮窗隐藏，并加 CF 验证页护栏，
-    # 彻底避免 DOM 遍历误删导致的白屏与 CF Turnstile 验证死循环。
+    filename: "missav.clean.v5.js"
+    # 融合 v4 的 Cloudflare 验证页护栏与 v3 的右下角透明浮窗定点清理：
+    # 1) 遇到 403/503 或 _cf_chl_opt / challenges.cloudflare.com 原样放行，绝不触发 CF 验证死循环；
+    # 2) 将内联广告 script/iframe 替换为 <i data-ad-marker="1">，配合 CSS + 轻量级定点 DOM 清理，
+    #    彻底清除进入网站后的右下角透明浮窗（空窗口+关闭按钮）。
     # 改脚本内容必须换文件名 —— QX 按 URL 缓存脚本本体，不换名设备不会重新下载。
-    local_file: "rewrites/local/missav.clean.v4.js"
+    local_file: "rewrites/local/missav.clean.v5.js"
     opt_parser: true
     enabled: true
-    desc: "MissAV 网页去广告与弹窗拦截（本地维护 v4，极简纯 CSS 方案）"
+    desc: "MissAV 网页去广告与右下角透明浮窗清理（本地维护 v5）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   # [已删除 2026-11] 彩云天气净化@ddgksf2013 —— 不用彩云天气，且它属于
