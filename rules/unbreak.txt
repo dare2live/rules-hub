@@ -1,5 +1,5 @@
-# 回家摄像头：远程期间由节点 18080 透明桥接补齐 WebRTC 公网 UDP 候选（媒体流 8189/UDP 仍按 GEOIP,CN 直连）
-# DOMAIN,cctv.lifehackers.cc
+# 回家摄像头：必须直连（外网走灰云 A 记录、内网走路由器 DNAT，开 QX 不得绕代理）
+DOMAIN,cctv.lifehackers.cc
 # 防误杀白名单 + 必须内联的直连（修正可能被广告规则拦截的正常功能域名）
 # 这个文件会被原样内联进 QX 的 [filter_local]，优先级高于所有 filter_remote 订阅，
 # 所以只放「订阅挂了也必须直连」的条目，不要放普通国内站点。
