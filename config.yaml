@@ -450,18 +450,15 @@ rewrites:
 
   - id: "missav"
     name: "MissAV"
-    filename: "missav.clean.v3.js"
-    # 上游版本停在 2025.12，站点广告位已换成 go.mayzaent.com / t.rallytrck.website，
-    # 上游选择器一个都没覆盖到，所以改为本地维护。
-    # v3（missav.clean.v3.js）修复：
-    #   1) v2 用 AD_RE.test(el.innerHTML) 扫所有 div，把含页脚链接的根容器 div.min-h-screen 删掉导致首页一闪白屏；
-    #   2) v2 先把广告 iframe 替换为空串，导致外层 fixed 漂浮广告盒失去特征而残留空窗+关闭按钮；
-    #      v3 改为替换为 <i data-ad-marker="1"></i>，配合 CSS :has([data-ad-marker]) 与结构护栏连壳拔除。
+    filename: "missav.clean.v4.js"
+    # 回归上游 ddgksf2013 (V1.0.6) 的极简架构（纯 CSS + window.open 拦截），
+    # 补齐当前广告域名与 div.fixed.right-2.bottom-2 右下角浮窗隐藏，并加 CF 验证页护栏，
+    # 彻底避免 DOM 遍历误删导致的白屏与 CF Turnstile 验证死循环。
     # 改脚本内容必须换文件名 —— QX 按 URL 缓存脚本本体，不换名设备不会重新下载。
-    local_file: "rewrites/local/missav.clean.v3.js"
+    local_file: "rewrites/local/missav.clean.v4.js"
     opt_parser: true
     enabled: true
-    desc: "MissAV 网页去广告与弹窗拦截（本地维护 v3，修复白屏与残留浮窗）"
+    desc: "MissAV 网页去广告与弹窗拦截（本地维护 v4，极简纯 CSS 方案）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   # [已删除 2026-11] 彩云天气净化@ddgksf2013 —— 不用彩云天气，且它属于

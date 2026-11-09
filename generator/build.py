@@ -102,7 +102,15 @@ def _expand_alternation(host):
 
 def _host_to_mitm(host):
     """把规则里的 host 片段转成 [mitm] hostname 条目（0 或 1 条）。"""
-    h = host.replace(r"\.", ".").replace(r"\-", "-").replace("\\", "").strip(".")
+    if host in MITM_OVERRIDES:
+        return MITM_OVERRIDES[host]
+    h_raw = host.replace(r"\.", ".").replace(r"\-", "-").replace("\\", "")
+    if h_raw in MITM_OVERRIDES:
+        return MITM_OVERRIDES[h_raw]
+    for k, v in MITM_OVERRIDES.items():
+        if k.replace(r"\.", ".").replace(r"\-", "-").replace("\\", "") == h_raw:
+            return v
+    h = h_raw.strip(".")
     if h in MITM_OVERRIDES:
         return MITM_OVERRIDES[h]
     if MITM_HOST_RE.fullmatch(h):
@@ -146,15 +154,18 @@ def derive_mitm_hostnames(paths):
             continue
         for line in text.splitlines():
             s = line.strip()
-            if " url " not in s or s.startswith("#") or s.startswith("//"):
+            if s.startswith("#") or s.startswith("//"):
                 continue
-            left = s.split(" url ")[0]
-            m = re.match(r"^\^https\?:\\/\\/(.*)$", left)
+            if " url " not in s and " url-and-header " not in s and "\turl " not in s:
+                continue
+            left = re.split(r"\s+url(?:-and-header)?\s+", s, maxsplit=1)[0]
+            m = re.match(r"^\(?(\^)?https\??:\\?/\\?/(.*)$", left)
             if not m:
                 continue
-            rest = m.group(1)
-            idx = rest.find("\\/")
-            raw = rest[:idx] if idx > 0 else rest
+            rest = m.group(2)
+            m_sep = re.search(r"\\?/|\\?\?|\$", rest)
+            raw = rest[:m_sep.start()] if m_sep else rest
+            raw = re.sub(r"\(:\d+\)\??$", "", raw)
             for item in _expand_alternation(raw):
                 hosts.update(_host_to_mitm(item))
 
@@ -924,7 +935,7 @@ def build_qx(config, rule_data, produced=None):
         target = r.get("target")
         force_target = map_target_to_qx(target)
         if "file" in r:
-            qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+            qx.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=false, enabled=true")
     # geoip 必须是最后一条：前面所有域名规则都没命中时才轮到它
     qx.append(qx_geoip_remote_line(base_url))
     qx.append("")
@@ -1215,10 +1226,12 @@ def build_rewrites(config):
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
         produced.add(fn)
-        # 兼容尚未重新导入主配置、仍在请求旧文件名 missav.clean.js 的设备
-        if rw_id == "missav" and fn != "missav.clean.js":
-            with open(rw_dist / "missav.clean.js", "w", encoding="utf-8") as out_legacy:
-                out_legacy.write(content)
+        # 兼容尚未重新导入主配置、仍在请求旧文件名 missav.clean.js / missav.clean.v3.js 的设备
+        if rw_id == "missav":
+            for legacy_fn in ("missav.clean.js", "missav.clean.v3.js"):
+                if fn != legacy_fn:
+                    with open(rw_dist / legacy_fn, "w", encoding="utf-8") as out_legacy:
+                        out_legacy.write(content)
             
         # Extract hostnames for all-in-one conf（仅启用的重写才需要 MITM）
         if enabled:
@@ -1249,7 +1262,7 @@ def build_rewrites(config):
         if "file" in r:
             # 用映射后的策略名：QX 内置是 direct / proxy，写成 DIRECT 会引用不到
             force_target = map_target_to_qx(target)
-            filter_remote_snippets.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+            filter_remote_snippets.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=false, enabled=true")
     # 与 profile.conf 保持一致：geoip 兜底放在最后
     filter_remote_snippets.append(qx_geoip_remote_line(base_url))
 
@@ -1322,6 +1335,8 @@ def build_rewrites(config):
                     seen_filters.add(low)
                     aio_filters.append(s)
             elif " url " in s or " url-and-header " in s or "\turl " in s:
+                if re.match(r"^\^https\?:\\/\\/20\d\d\.\d\d\.\d\d\/", s):
+                    continue  # 跳过上游 StartUpAds.conf 伪装成规则的版本号水印行
                 rw_lines.append(s)
 
         if rw_lines:
@@ -1601,7 +1616,7 @@ def generate_personal_qx_config(config, produced=None):
         target = r.get("target")
         force_target = map_target_to_qx(target)
         if "file" in r:
-            p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=true, enabled=true")
+            p.append(f"{base_url}/qx/{rule_id}.list, tag={get_qx_tag(rule_id)}, force-policy={force_target}, update-interval=86400, opt-parser=false, enabled=true")
     # geoip 必须是最后一条：前面所有域名规则都没命中时才轮到它
     p.append(qx_geoip_remote_line(base_url))
     p.append("")
@@ -1939,20 +1954,23 @@ def build_clash(config, rule_data):
     L.append("  auto-detect-interface: true")
     L.append("")
 
-    # 嗅探：不少规则靠域名匹配，但有些流量进来时只有 IP。
-    # sniffer 能把 TLS SNI / HTTP Host 捞回来，避免这类流量掉到 GEOIP 兜底。
+    # 嗅探：对齐 ProjectClash/Clash-Client 的 ModuleInjection.snifferValue。
+    # 必须保持 override-destination: false、force-dns-mapping: false 且跳过 198.18.0.1/16，
+    # 否则 Fake-IP 下的 App 流量无法正常进入模块 MITM 引擎与 module-reinject 回注通道。
     L.append("sniffer:")
     L.append("  enable: true")
-    L.append("  force-dns-mapping: true")
-    L.append("  parse-pure-ip: true")
     L.append("  override-destination: false")
+    L.append("  force-dns-mapping: false")
+    L.append("  parse-pure-ip: true")
+    L.append("  skip-dst-address:")
+    L.append("    - 198.18.0.1/16")
     L.append("  sniff:")
-    L.append("    HTTP:")
-    L.append("      ports: [80, 8080-8880]")
     L.append("    TLS:")
-    L.append("      ports: [443, 8443]")
+    L.append("      ports: [443]")
+    L.append("    HTTP:")
+    L.append("      ports: [80]")
     L.append("    QUIC:")
-    L.append("      ports: [443, 8443]")
+    L.append("      ports: [443]")
     L.append("")
 
     L.append("geodata-mode: true")
@@ -2225,15 +2243,18 @@ def generate_personal_clash_config(config, rule_data):
     L.append("")
     L.append("sniffer:")
     L.append("  enable: true")
-    L.append("  force-dns-mapping: true")
+    L.append("  override-destination: false")
+    L.append("  force-dns-mapping: false")
     L.append("  parse-pure-ip: true")
+    L.append("  skip-dst-address:")
+    L.append("    - 198.18.0.1/16")
     L.append("  sniff:")
-    L.append("    HTTP:")
-    L.append("      ports: [80, 8080-8880]")
     L.append("    TLS:")
-    L.append("      ports: [443, 8443]")
+    L.append("      ports: [443]")
+    L.append("    HTTP:")
+    L.append("      ports: [80]")
     L.append("    QUIC:")
-    L.append("      ports: [443, 8443]")
+    L.append("      ports: [443]")
     L.append("")
     L.append("geodata-mode: true")
     L.append("geo-auto-update: true")
@@ -2589,6 +2610,15 @@ def main():
             for u in upstreams:
                 u_lines = fetch_upstream(u)
                 raw_lines.extend((ln, True) for ln in u_lines)
+        if r_id == "proxy":
+            # 融合 GFWList 纯域名表（与软路由同源）：让 99% 海外常见站点直接在 proxy.list
+            # 按域名命中（0ms 本地 DNS 等待），避免落入末尾 geoip,cn 触发 223.5.5.5 同步解析。
+            # 按域名层级从短到长排序，使父域自动合并同表内的冗余子域。
+            gfw_domains = load_cached_data(
+                DATA_DIR / "gfwlist.txt", GFWLIST_URL, parse_gfwlist_domains, 1000, "gfwlist"
+            )
+            for gd in sorted(gfw_domains, key=lambda d: (len(d.split(".")), d)):
+                raw_lines.append((f"DOMAIN-SUFFIX,{gd}", True))
 
         # Normalize, deduplicate & apply immunity / upstream shadowing protection
         seen = set()

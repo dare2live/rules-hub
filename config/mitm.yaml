@@ -4,8 +4,8 @@
 # 是裸规则（没有 hostname 行），所以从规则本身反推。只解密「确实有重写规则」
 # 的主机，比无脑 MITM 全网更省电，也更不容易搞坏证书校验。
 
-# 合法主机名：允许 *. 前缀
-host_regex: '^(?:\*\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$'
+# 合法主机名：允许 *. 前缀或首标签含 * 通配（如 *-spclient.spotify.com / interface*.music.163.com）
+host_regex: '^(?:\*\.|[A-Za-z0-9\*][A-Za-z0-9\-\*]{0,61}\.)(?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z]{2,24}$'
 
 # 这些是「二级后缀」，通配目标要取三级而不是二级，
 # 否则 *.com.cn 等于把全国 .cn 站点都 MITM 了。
@@ -28,8 +28,14 @@ multi_tld:
 overrides:
   .*\.xima\..*\.com:
     - '*.ximalaya.com'
+  .*\.xima.*\.com:
+    - '*.ximalaya.com'
+  gslb.*\.xima.*\.com:
+    - '*.ximalaya.com'
   xima\..*\.com:
     - '*.ximalaya.com'
+  .*-spclient\.spotify\.com:
+    - '*-spclient.spotify.com'
   .*flyert.*:
     - '*.flyert.com'
   .*zhijianmedia\.cn:
@@ -49,6 +55,11 @@ overrides:
     - api.weibo.cn
     - mapi.weibo.cn
   m?api\.weibo\.com:
+    - api.weibo.com
+    - mapi.weibo.com
+  m?api\.weibo\.c(n|om):
+    - api.weibo.cn
+    - mapi.weibo.cn
     - api.weibo.com
     - mapi.weibo.com
   .*cupid\.iqiyi\.com:
