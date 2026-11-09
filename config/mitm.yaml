@@ -23,6 +23,8 @@ multi_tld:
   - com.sg
 
 # 正则写法无法机械转换时的手工映射
+# 注意：不要让常见大厂的泛正则退化成 *.meituan.com / *.amap.com / *.weibo.com 等整域通配，
+# 否则会把图片 CDN、视频流、地图瓦片、长连接全部拉进 TLS MITM，触发 QUIC 降级或证书锁定超时。
 overrides:
   .*\.xima\..*\.com:
     - '*.ximalaya.com'
@@ -32,6 +34,37 @@ overrides:
     - '*.flyert.com'
   .*zhijianmedia\.cn:
     - '*.zhijianmedia.cn'
+  .*\.amap\.com:
+    - m5.amap.com
+    - m5-zb.amap.com
+    - dualstack-m5.amap.com
+    - oss.amap.com
+    - optimus-ads.amap.com
+    - u5.amap.com
+    - page.amap.com
+  (g-)?acs\.m\.goofish\.com:
+    - acs.m.goofish.com
+    - g-acs.m.goofish.com
+  m?api\.weibo\.cn:
+    - api.weibo.cn
+    - mapi.weibo.cn
+  m?api\.weibo\.com:
+    - api.weibo.com
+    - mapi.weibo.com
+  .*cupid\.iqiyi\.com:
+    - '*.cupid.iqiyi.com'
+    - t7z.cupid.iqiyi.com
+  '[a-z]+\.eastmoney\.com':
+    - emdcad.eastmoney.com
+    - app.eastmoney.com
+  .*\.meituan\.com:
+    - api.meituan.com
+    - mapi.meituan.com
+    - i.meituan.com
+    - waimaiapi.meituan.com
+  interface(\d)?\.music\.163\.com:
+    - interface.music.163.com
+    - interface3.music.163.com
 
 # 银行 / 支付 / 12306 不解密。
 #
@@ -69,3 +102,13 @@ deny_exact:
   - '*.gov.cn'
   - '*.com'
   - '*.cn'
+  # 禁止国内高频超级 App 整域通配（具体业务接口已由 overrides 精确指定）
+  - '*.baidu.com'
+  - '*.meituan.com'
+  - '*.iqiyi.com'
+  - '*.amap.com'
+  - '*.eastmoney.com'
+  - '*.goofish.com'
+  - '*.weibo.com'
+  - '*.weibo.cn'
+  - '*.163.com'

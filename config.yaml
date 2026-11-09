@@ -49,7 +49,7 @@ policies:
     type: "select"
     desc: "Gemini / Antigravity 专属通道（美区优选，杜绝香港）"
     qx_default: "Google Oregon"
-    default_select: "🇺🇸 美国自动优选"
+    default_select: "Google Oregon"
     proxies:
       - "Google Oregon"
       - "Oracle San Jose"
@@ -64,7 +64,7 @@ policies:
     type: "select"
     desc: "ChatGPT / Codex 专属通道（锁定美区，OpenAI 对新加坡出口风控更严）"
     qx_default: "Google Oregon"
-    default_select: "🇺🇸 美国自动优选"
+    default_select: "Google Oregon"
     proxies:
       - "Google Oregon"
       - "Oracle San Jose"
@@ -108,7 +108,7 @@ policies:
     type: "select"
     desc: "全球通用外网加速（X、GitHub、Google 搜索），新加坡优先"
     qx_default: "Lightsail Singapore"
-    default_select: "🇸🇬 新加坡自动备用"
+    default_select: "Lightsail Singapore"
     proxies:
       - "Lightsail Singapore"
       - "Oracle San Jose"
@@ -122,7 +122,7 @@ policies:
     type: "select"
     desc: "国际流媒体（YouTube、Netflix、Spotify），新加坡优先"
     qx_default: "Lightsail Singapore"
-    default_select: "🇸🇬 新加坡自动备用"
+    default_select: "Lightsail Singapore"
     proxies:
       - "Lightsail Singapore"
       - "Oracle San Jose"
@@ -243,6 +243,15 @@ rule_sources:
       - "WorkBuddy AI"
       - "codebuddy"
 
+  # 放在 WorkBuddy 业务细分之后、海外媒体/通用代理大表之前：
+  # 1) 不会吃掉 workbuddy_cn（copilot.tencent.com）与 workbuddy（cos.ap-singapore.myqcloud.com）；
+  # 2) 与后面的 media / openai / tiktok / proxy 零域名冲突（rules_lint --strict 验证）；
+  # 3) 让 90% 的国内日常网页与 App 流量在扫描两千多条海外规则前直接命中 DIRECT。
+  - id: "custom_direct"
+    target: "DIRECT"
+    file: "rules/direct.txt"
+    desc: "个人专属项目直连、微信、企业微信、国内银行"
+
   - id: "media"
     target: "Media"
     file: "rules/media.txt"
@@ -272,14 +281,6 @@ rule_sources:
     desc: "通用海外常用站点（融合上游 Google 全生态 + 现代海外站点与 Stremio 详情页海报）"
     upstream_urls:
       - "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Surge/Google/Google.list"
-
-  # 放在业务列表之后：这里是大范围直连兜底（腾讯 / 阿里 / 字节 / 银行…），
-  # 只有前面没有更具体的业务规则时才由它接管。
-  # 放前面会「吃掉」workbuddy-cn 与 workbuddy 里的子域规则。
-  - id: "custom_direct"
-    target: "DIRECT"
-    file: "rules/direct.txt"
-    desc: "个人专属项目直连、微信、企业微信、国内银行"
 
   - id: "china_geoip"
     target: "DIRECT"
@@ -449,16 +450,18 @@ rewrites:
 
   - id: "missav"
     name: "MissAV"
-    filename: "missav.clean.js"
+    filename: "missav.clean.v3.js"
     # 上游版本停在 2025.12，站点广告位已换成 go.mayzaent.com / t.rallytrck.website，
     # 上游选择器一个都没覆盖到，所以改为本地维护。
-    # v2（missav.clean.js）补掉了「内容已屏蔽但透明浮层和关闭 X 还在」的问题：
-    # 用 :has() 干掉装广告的 fixed 容器，再加 MutationObserver 清理 JS 延迟插入的浮层。
+    # v3（missav.clean.v3.js）修复：
+    #   1) v2 用 AD_RE.test(el.innerHTML) 扫所有 div，把含页脚链接的根容器 div.min-h-screen 删掉导致首页一闪白屏；
+    #   2) v2 先把广告 iframe 替换为空串，导致外层 fixed 漂浮广告盒失去特征而残留空窗+关闭按钮；
+    #      v3 改为替换为 <i data-ad-marker="1"></i>，配合 CSS :has([data-ad-marker]) 与结构护栏连壳拔除。
     # 改脚本内容必须换文件名 —— QX 按 URL 缓存脚本本体，不换名设备不会重新下载。
-    local_file: "rewrites/local/missav.clean.js"
+    local_file: "rewrites/local/missav.clean.v3.js"
     opt_parser: true
     enabled: true
-    desc: "MissAV 网页去广告与弹窗拦截（本地维护，2026-10 实测广告位）"
+    desc: "MissAV 网页去广告与弹窗拦截（本地维护 v3，修复白屏与残留浮窗）"
 
   # ======= 可选备用重写 (默认保持关闭) ======= #
   # [已删除 2026-11] 彩云天气净化@ddgksf2013 —— 不用彩云天气，且它属于

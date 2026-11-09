@@ -405,14 +405,26 @@ def normalize_rule(line):
     if not parts or not parts[0]:
         return None
     rtype = parts[0].upper()
+    if rtype in ("URL-REGEX", "AND", "OR", "NOT"):
+        # URL-REGEX 强依赖 MITM 解密才能看到路径，且在 QX / Clash 规则表里属于非法语法；
+        # 复合逻辑规则（AND/OR/NOT）在 QX 与 Clash classical provider 中同样不兼容，直接剔除。
+        return None
     if rtype in ("DOMAIN-SUFFIX", "HOST-SUFFIX"):
         return f"DOMAIN-SUFFIX,{parts[1]}"
     elif rtype in ("DOMAIN", "HOST"):
         return f"DOMAIN,{parts[1]}"
     elif rtype in ("DOMAIN-KEYWORD", "HOST-KEYWORD"):
         return f"DOMAIN-KEYWORD,{parts[1]}"
+    elif rtype == "USER-AGENT":
+        return f"USER-AGENT,{parts[1]}"
     elif rtype == "IP-CIDR":
-        return f"IP-CIDR,{parts[1]}"
+        # 强制保留 no-resolve：避免 Surge / Clash 在扫描前序规则集（如 reject.list）时
+        # 对所有域名请求触发同步本地 DNS 解析，拖慢国内外首包并破坏境外域名远端解析。
+        return f"IP-CIDR,{parts[1]},no-resolve"
+    elif rtype in ("IP-CIDR6", "IP6-CIDR"):
+        return f"IP-CIDR6,{parts[1]},no-resolve"
+    elif rtype == "IP-ASN":
+        return f"IP-ASN,{parts[1]},no-resolve"
     elif rtype == "PROCESS-NAME":
         return f"PROCESS-NAME,{parts[1]}"
     elif "." in parts[0] and " " not in parts[0] and not parts[0].startswith("/"):
@@ -449,25 +461,34 @@ def map_target_to_qx(target):
 
 
 def to_qx_rule(line, target=None):
-    """Translate Surge rule line to Quantumult X syntax with optional policy assignment."""
+    """Translate Surge rule line to Quantumult X syntax with optional policy assignment.
+
+    注意：Quantumult X 原生分流语法不支持 no-resolve。任何出现在前序订阅（如 reject.list /
+    media.list）或 [filter_local] 顶部的 IP-CIDR / IP6-CIDR / IP-ASN 规则，都会迫使 QX
+    在对域名请求匹配后续规则前先发起本地同步 DNS 解析：
+      1) 国内站点平白多一次阻塞等待；
+      2) 境外站点被送去国内 DNS（223.5.5.5）解析，触发抢答投毒或 2-5 秒超时，
+         彻底破坏 [dns] 段「境外域名不在本地解析」的设计。
+    因此业务分流表只输出纯域名与 UA 规则；局域网与国内 IP 判别统一收敛至末尾的 geoip_cn.list。
+    """
     parts = [p.strip() for p in line.split(",")]
-    if not parts:
+    if not parts or len(parts) < 2:
         return None
     rule_type = parts[0].upper()
     qx_target = map_target_to_qx(target)
     suffix = f",{qx_target}" if qx_target else ""
-    
-    if rule_type == "DOMAIN-SUFFIX":
+
+    if rule_type in ("DOMAIN-SUFFIX", "HOST-SUFFIX"):
         return f"HOST-SUFFIX,{parts[1]}{suffix}"
-    elif rule_type == "DOMAIN":
+    elif rule_type in ("DOMAIN", "HOST"):
         return f"HOST,{parts[1]}{suffix}"
-    elif rule_type == "DOMAIN-KEYWORD":
+    elif rule_type in ("DOMAIN-KEYWORD", "HOST-KEYWORD"):
         return f"HOST-KEYWORD,{parts[1]}{suffix}"
-    elif rule_type == "IP-CIDR":
-        return f"IP-CIDR,{parts[1]}{suffix}"
-    elif rule_type == "PROCESS-NAME":
+    elif rule_type == "USER-AGENT":
+        return f"USER-AGENT,{parts[1]}{suffix}"
+    elif rule_type in ("IP-CIDR", "IP-CIDR6", "IP6-CIDR", "IP-ASN", "PROCESS-NAME", "URL-REGEX", "AND", "OR", "NOT"):
         return None
-    return f"{line}{suffix}"
+    return None
 
 
 def extract_domains_for_router(lines):
@@ -670,12 +691,14 @@ def build_qx_policy_block(config, node_tags):
         # 兜底组（全球加速）末尾挂上自动选择，节点劣化时不用手改
         if key == "Proxy" and has_auto and auto_group not in members:
             members.append(auto_group)
-        # 每个组末尾都补上 QX 内置的 proxy 与 direct。
-        # 不补的话，更新配置后想临时把某个组切成直连，客户端里根本没有这个选项，
-        # 只能回来改配置重新生成 —— 这就是「每次更新都得手工调整」的来源。
-        for builtin in ("proxy", "direct"):
-            if builtin not in members:
-                members.append(builtin)
+        # 每个组末尾补齐 direct；仅当组内尚未包含「全球加速」时才补内置 proxy，
+        # 避免业务组同时出现「全球加速」和「proxy」两个同义代理入口。
+        if "全球加速" not in members and name != "全球加速" and "proxy" not in members:
+            members.append("proxy")
+        elif name == "全球加速" and not node_tags and "proxy" not in members:
+            members.append("proxy")
+        if "direct" not in members:
+            members.append("direct")
         # 默认选中项 = 成员列表的第一个。
         # config.yaml 里用 qx_default 指定，避免把「哪组默认走哪」写死在代码里。
         # 取值可以是节点名、内置策略（proxy / direct / reject）、或别的策略组名。
@@ -1192,6 +1215,10 @@ def build_rewrites(config):
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
         produced.add(fn)
+        # 兼容尚未重新导入主配置、仍在请求旧文件名 missav.clean.js 的设备
+        if rw_id == "missav" and fn != "missav.clean.js":
+            with open(rw_dist / "missav.clean.js", "w", encoding="utf-8") as out_legacy:
+                out_legacy.write(content)
             
         # Extract hostnames for all-in-one conf（仅启用的重写才需要 MITM）
         if enabled:
@@ -1386,25 +1413,33 @@ QX_GEOIP_FILE = "geoip_cn.list"
 
 
 def write_qx_geoip_list():
-    """国内 IP 兜底直连，写成一条独立的远程资源。
+    """国内与局域网 IP 兜底直连，写成一条独立的远程资源。
 
-    为什么要单独成一条，而不是继续写在 [filter_local]：
-      QX 的匹配顺序是 filter_local → filter_remote → final。以前 geoip 写在
-      filter_local，等于排在所有业务规则前面：
+    为什么要单独成一条，且把局域网 ip-cidr 也收进来，而不是继续写在 [filter_local]：
+      QX 的匹配顺序是 filter_local → filter_remote → final。任何写在 filter_local
+      或前序 filter_remote 里的 ip-cidr / geoip 规则（QX 不支持 no-resolve），都会迫使
+      QX 在匹配后面的远程域名规则之前，先对当前域名发起一次本地同步 DNS 解析：
         1) 任何解析到国内 IP 的域名都不可能再被业务组接管（业务规则被架空）；
-        2) 每条新连接都要先本地解析一次才能判 geoip，和 [dns] 里
-           「境外域名不在本地解析」的设计互相打架，首包白白多一个 RTT。
-      把它放到 filter_remote 的最后一条，才是真正的兜底：
-      只有前面所有域名规则都没命中时，才去解析并判断归属。
+        2) 每条新连接都要先本地解析一次才能判 ip-cidr / geoip，和 [dns] 里
+           「境外域名不在本地解析」的设计互相打架，首包白白多一个 RTT 甚至超时。
+      把所有 IP 类规则统一放到 filter_remote 的最后一条，才是真正的零 DNS 阻塞兜底：
+      前面 13 个纯域名规则集先以 O(1) 零解析匹配，只有全部未命中的未知域名或纯 IP 连接
+      才会走到这里做 DNS 解析与归属判别。
     """
     QX_DIST.mkdir(parents=True, exist_ok=True)
     content = [
-        "# 国内 IP 兜底直连（Quantumult X）",
+        "# 局域网与国内 IP 兜底直连（Quantumult X）",
         "# Source: Rules Hub",
         "#",
-        "# 必须排在 [filter_remote] 的最后一条：它的作用是「前面都没命中时」，",
-        "# 而不是「优先判断」。放到前面会架空前后的所有业务分组。",
+        "# 必须排在 [filter_remote] 的最后一条：它的作用是「前面所有域名规则都没命中时」，",
+        "# 而不是「优先判断」。放到前面会触发同步 DNS 解析并架空所有业务分组。",
         "",
+        "ip-cidr, 10.0.0.0/8, direct",
+        "ip-cidr, 127.0.0.0/8, direct",
+        "ip-cidr, 172.16.0.0/12, direct",
+        "ip-cidr, 192.168.0.0/16, direct",
+        "ip-cidr, 100.64.0.0/10, direct",
+        "ip-cidr, 224.0.0.0/24, direct",
         "geoip, cn, direct",
     ]
     (QX_DIST / QX_GEOIP_FILE).write_text("\n".join(content) + "\n", encoding="utf-8")
@@ -1549,16 +1584,12 @@ def generate_personal_qx_config(config, produced=None):
     p.append("")
 
     p.append("[filter_local]")
-    p.append("# 局域网与保留地址直连")
-    for cidr in ("10.0.0.0/8", "127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/24"):
-        p.append(f"ip-cidr, {cidr}, direct")
-
     inline_rules = build_qx_inline_direct_rules()
-    p.append("# 防误杀白名单（内联，优先级高于所有远程订阅）")
+    p.append("# 防误杀白名单（内联纯域名规则，优先级高于所有远程订阅，且零 DNS 解析开销）")
+    p.append("# 局域网 IP 段已由 [general] excluded_routes 与末尾 geoip_cn.list 双重兜底，")
+    p.append("# 不在此处写 ip-cidr，避免 QX 在匹配远程域名规则前对所有连接触发同步本地 DNS 解析。")
     p.append("# 关键：BYD / DiLink 等「国内域名 + 境外 IP」的服务必须在这里直连，")
     p.append("#       否则订阅拉取失败或域名解析出境外 IP 时，会被 final 送进代理。")
-    p.append("# 注意：普通国内站点不内联。内联规则会压过 filter_remote 里的业务分组，")
-    p.append("#       比如 tencent.com 会把 copilot.tencent.com 吃掉，WorkBuddy（国内版）就白设了。")
     p.extend(inline_rules)
 
     p.append("final, 兜底分流")
@@ -1780,11 +1811,9 @@ def surge_rule_to_clash(line):
 
     if kind in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD"):
         return f"{kind},{val}"
-    if kind == "IP-CIDR":
+    if kind in ("IP-CIDR", "IP-CIDR6"):
         # no-resolve 在 Clash 里是规则尾部的选项，语义和 Surge 一致
-        if len(parts) >= 3 and parts[2].lower() == "no-resolve":
-            return f"IP-CIDR,{val},no-resolve"
-        return f"IP-CIDR,{val}"
+        return f"{kind},{val},no-resolve"
     if kind == "IP-ASN":
         # mihomo 的 IP-ASN 不接受 no-resolve，带上会解析失败，这里去掉
         return f"IP-ASN,{val}"

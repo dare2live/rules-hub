@@ -62,6 +62,19 @@ DOMAIN-SUFFIX,hadronid.net
 DOMAIN-SUFFIX,ttdcdn.org
 DOMAIN-SUFFIX,minutemedia-prebid.com
 
+# ===== MissAV 网页广告联盟与弹窗源（2026-11 实测）=====
+DOMAIN-SUFFIX,mayzaent.com
+DOMAIN-SUFFIX,greentrafsa.com
+DOMAIN-SUFFIX,rallytrck.website
+DOMAIN-SUFFIX,tsyndicate.com
+DOMAIN-SUFFIX,exoclick.com
+DOMAIN-SUFFIX,magsrv.com
+DOMAIN-SUFFIX,juicyads.com
+DOMAIN-SUFFIX,trafficjunky.net
+DOMAIN-SUFFIX,trafficjunky.com
+DOMAIN-SUFFIX,realsrv.com
+DOMAIN-SUFFIX,popads.net
+
 # 明确不拦（记在这里，下次不用重新判断一遍）：
 #   api.revenuecat.com                          FotMob+ 订阅管理，拦了内购异常
 #   firebaseremoteconfigrealtime.googleapis.com App 远程配置
