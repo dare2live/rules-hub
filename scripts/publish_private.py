@@ -40,6 +40,7 @@ SURGE_PROFILE = (
 UPLOADS = [
     ("qx", "qx.conf", BASE_DIR / "QuantumultX_Personal.conf", "Quantumult X 完整配置", True),
     ("clash", "clash.yaml", BASE_DIR / "Clash_Personal.yaml", "Clash / mihomo 完整配置", True),
+    ("module", "module.conf", BASE_DIR / "dist" / "qx" / "rewrites" / "all.conf", "Clash 模块 · 全量重写与 MITM (QX 同源)", False),
     ("nodes-clash", "nodes.yaml", PRIVATE_DIR / "nodes.yaml", "节点订阅 · Clash provider", False),
     ("nodes-qx", "nodes.txt", PRIVATE_DIR / "nodes.txt", "节点订阅 · 通用 base64", False),
     ("surge", "surge.conf", SURGE_PROFILE, "Surge 完整配置", False),

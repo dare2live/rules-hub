@@ -1250,27 +1250,89 @@ def build_rewrites(config):
     if not mitm_hosts:
         print("   ⚠️  [MITM] hostname 为空，HTTPS 重写将全部失效")
 
-    # Build All-in-One rewrite conf (combining active conf rewrites)
+    # Build All-in-One rewrite conf (combining all active .conf & .js rewrites, filters, selftest, task & MITM)
+    # 兼容 Quantumult X 与 ProjectClash/Clash-Client 的 ModuleQuantumultXParser：
+    #   - #!name / #!desc / #!icon 元数据头供 Clash 模块列表展示
+    #   - [filter_local] 收纳重写内置的 host / host-suffix 规则（避免混在 [rewrite_local] 被判 unreadableLine）
+    #   - [rewrite_local] 收纳自检规则 + 全部 9 个 .conf 与 7 个 .js（从头部注释块提取）的 url 重写与脚本
+    #   - [task_local] 收纳流媒体解锁面板/交互脚本
+    #   - [mitm] 收纳自动推导的全部解密主机名
+    filter_prefixes = (
+        "host,", "host-suffix,", "host-keyword,", "host-wildcard,",
+        "ip-cidr,", "ip6-cidr,", "geoip,", "ip-asn,", "user-agent,",
+        "domain,", "domain-suffix,", "domain-keyword,", "ip-cidr6,",
+    )
+    aio_filters = []
+    seen_filters = set()
+    aio_rewrites = []
+    for st_line in build_qx_selftest_rules(base_url):
+        aio_rewrites.append(st_line)
+
+    for rw in rewrites:
+        if not rw.get("enabled", True) or rw.get("mirror_only", False):
+            continue
+        fn = rw["filename"]
+        fpath = rw_dist / fn
+        if not fpath.exists():
+            continue
+        raw_text = fpath.read_text(encoding="utf-8", errors="ignore")
+        if fn.endswith(".js"):
+            m_blk = re.search(r"/\*.*?\*/", raw_text, re.S)
+            block = m_blk.group(0) if m_blk else ""
+        else:
+            block = raw_text
+
+        rw_lines = []
+        for line in block.splitlines():
+            s = line.strip()
+            if not s or s.startswith(("#", ";", "//", "/*", "*", "*/", "[")):
+                continue
+            if re.match(r"^hostname\s*=", s, re.I):
+                continue
+            low = s.lower().replace(" ", "")
+            if low.startswith(filter_prefixes):
+                if low not in seen_filters:
+                    seen_filters.add(low)
+                    aio_filters.append(s)
+            elif " url " in s or " url-and-header " in s or "\turl " in s:
+                rw_lines.append(s)
+
+        if rw_lines:
+            aio_rewrites.append(f"# --- {rw['name']} ---")
+            aio_rewrites.extend(rw_lines)
+            aio_rewrites.append("")
+
+    global_icon = QX_ICONS.get("全球加速", f"{base_url}/qx/scripts/3ed21f4c-Global.png")
+    stream_check_src = (CFG_QX.get("assets") or {}).get("streaming_check", "")
+    stream_check_url = QX_ASSET_URLS.get(stream_check_src, stream_check_src)
+
     aio = [
-        "# ===== Rules Hub Quantumult X All-In-One Unified Rewrites =====",
+        "#!name=Rules Hub 全量重写与净化",
+        "#!desc=手机 Quantumult X 同源 16 项重写、去开屏、油管/微博/喜马拉雅/高德/小红书/雪球/闲鱼净化、Spotify/波点/百度网盘/西窗烛/Bloomberg/MissAV/有谱么/FotMob+ 解锁与流媒体检测",
+        f"#!author={config['meta'].get('author', 'dare2live')}",
+        f"#!homepage={base_url}/",
+        f"#!icon={global_icon}",
+        "# ===== Rules Hub All-In-One Unified Rewrites & Module (QX / Clash) =====",
         f"# Auto-synced daily at 04:00: {base_url}",
         "",
-        f"hostname = {', '.join(mitm_hosts)}",
-        ""
+        "[filter_local]",
+        *aio_filters,
+        "",
+        "[rewrite_local]",
+        *aio_rewrites,
     ]
-    for rw in rewrites:
-        if rw.get("enabled", True) and rw["filename"].endswith(".conf"):
-            fn = rw["filename"]
-            fpath = rw_dist / fn
-            if fpath.exists():
-                aio.append(f"# --- {rw['name']} ---")
-                lines = fpath.read_text(encoding="utf-8", errors="ignore").splitlines()
-                for line in lines:
-                    s = line.strip()
-                    if not s.startswith("hostname") and not s.startswith("#") and not s.startswith(";"):
-                        aio.append(line)
-                aio.append("")
-                
+    if stream_check_url:
+        aio.extend([
+            "[task_local]",
+            f"event-interaction {stream_check_url}, tag=流媒体解锁查询, img-url=arrowtriangle.right.square.system, enabled=true",
+            "",
+        ])
+    aio.extend([
+        "[mitm]",
+        f"hostname = {', '.join(mitm_hosts)}",
+        "",
+    ])
+
     with open(rw_dist / "all.conf", "w", encoding="utf-8") as f:
         f.write("\n".join(aio) + "\n")
     return produced
@@ -1819,7 +1881,9 @@ def build_clash(config, rule_data):
     L.append("  fake-ip-filter:")
     for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
                  "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
-                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'"):
+                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'",
+                 "'+.10099.com.cn'", "'+.cmpassport.com'", "'+.jegotrip.com.cn'",
+                 "'+.icitymobile.mobi'", "'id6.me'", "'+.pingan.com.cn'"):
         L.append(f"    - {item}")
     L.append("  default-nameserver:")
     L.append("    - 223.5.5.5")
@@ -2105,7 +2169,9 @@ def generate_personal_clash_config(config, rule_data):
     L.append("  fake-ip-filter:")
     for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
                  "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
-                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'"):
+                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'",
+                 "'+.10099.com.cn'", "'+.cmpassport.com'", "'+.jegotrip.com.cn'",
+                 "'+.icitymobile.mobi'", "'id6.me'", "'+.pingan.com.cn'"):
         L.append(f"    - {item}")
     L.append("  default-nameserver:")
     L.append("    - 223.5.5.5")
@@ -2239,8 +2305,11 @@ def generate_personal_clash_config(config, rule_data):
     # 自己的节点服务器直连，不绕道代理（管理/SSH 流量）。
     # 之前这里硬编码了某一个 Oracle IP，既违反「公开侧不出现节点 IP」的铁律，
     # 又漏掉了另外两台 VPS。改为从节点清单动态生成，三台一起覆盖，且源码里不再有明文 IP。
+    seen_servers = []
     for _n in nodes:
-        L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
+        if _n["server"] not in seen_servers:
+            seen_servers.append(_n["server"])
+            L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
     L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
     for r in config["rule_sources"]:
@@ -2538,10 +2607,10 @@ def main():
     build_surge(config, rule_data)
     
     print("🔨 Generating Quantumult X configurations and rulesets...")
-    produced = build_rewrites(config)
-    # 图标与外部资源必须在 build_qx 之前镜像好：build_qx 与
-    # generate_personal_qx_config 都直接读 CFG_QX 的 icons。
+    # 图标与外部资源必须在 build_rewrites / build_qx 之前镜像好：
+    # all.conf、build_qx 与 generate_personal_qx_config 都直接读 QX_ICONS / QX_ASSET_URLS。
     build_qx_assets(config)
+    produced = build_rewrites(config)
     build_qx(config, rule_data, produced)
     generate_personal_qx_config(config, produced)
     

@@ -17,6 +17,7 @@
 const FILES = {
   "clash.yaml": { key: "clash", type: "text/yaml; charset=utf-8", label: "Clash / mihomo 完整配置" },
   "clash.yml": { key: "clash", type: "text/yaml; charset=utf-8", label: "Clash / mihomo 完整配置" },
+  "module.conf": { key: "module", type: "text/plain; charset=utf-8", label: "Clash 模块 · 全量重写与 MITM (QX 同源)" },
   "qx.conf": { key: "qx", type: "text/plain; charset=utf-8", label: "Quantumult X 完整配置" },
   "quantumultx.conf": { key: "qx", type: "text/plain; charset=utf-8", label: "Quantumult X 完整配置" },
   "surge.conf": { key: "surge", type: "text/plain; charset=utf-8", label: "Surge 完整配置" },
