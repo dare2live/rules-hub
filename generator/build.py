@@ -1549,6 +1549,8 @@ def generate_personal_qx_config(config, produced=None):
     p.append("")
 
     p.append("[filter_local]")
+    p.append("# 摄像头远端信令透明桥接（内联在最前，优先于所有远程订阅，8189/UDP 媒体流仍走国内直连）")
+    p.append("host,cctv.lifehackers.cc,全球加速")
     p.append("# 局域网与保留地址直连")
     for cidr in ("10.0.0.0/8", "127.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/24"):
         p.append(f"ip-cidr, {cidr}, direct")
