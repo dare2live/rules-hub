@@ -10,6 +10,17 @@ DOMAIN-SUFFIX,apple.com
 DOMAIN-SUFFIX,icloud.com
 DOMAIN-SUFFIX,crashlytics.com
 
+# 企业微信 / 微信 / 腾讯位置服务 / 高德定位 SDK（内联最高优先级直连，防止任何前置广告或代理规则拦截打卡定位）
+DOMAIN-SUFFIX,work.weixin.qq.com
+DOMAIN-SUFFIX,qyapi.weixin.qq.com
+DOMAIN-SUFFIX,weixin.qq.com
+DOMAIN-SUFFIX,wechat.com
+DOMAIN-SUFFIX,servicewechat.com
+DOMAIN-SUFFIX,map.qq.com
+DOMAIN-SUFFIX,amap.com
+DOMAIN-SUFFIX,autonavi.com
+DOMAIN-SUFFIX,amap.cn
+
 # 比亚迪 (BYD) 车联、车机与云服务（从 direct.txt 移来）
 # 这里的规则会被内联进 [filter_local]，优先级高于所有远程订阅；
 # BYD App 会轮换使用多个云端域名，且对出口 IP 地区敏感，

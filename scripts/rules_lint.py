@@ -155,6 +155,51 @@ def duplicates_within(sources):
     return out
 
 
+def check_reject_vs_direct(sources):
+    """检查前置 reject.list 是否反向刺穿了后置 custom_direct.list 的受保护直连域（含 HOST-KEYWORD 子域）。"""
+    src_map = {sid: rules for sid, _t, rules in sources}
+    reject_rules = src_map.get("reject", [])
+    direct_domains = {val for rtype, val, _loc in src_map.get("custom_direct", []) if rtype in ("DOMAIN", "DOMAIN-SUFFIX")}
+    leaks = []
+    for rtype, val, loc in reject_rules:
+        hits = [
+            d for d in direct_domains
+            if val == d or val.endswith("." + d) or d.endswith("." + val) or (rtype == "DOMAIN-KEYWORD" and val in d)
+        ]
+        if hits:
+            leaks.append((loc, rtype, val, sorted(hits)[0]))
+    return leaks
+
+
+def check_mitm_safety():
+    """检查主配置与所有镜像重写文件内的 [mitm] hostname 是否混入禁用整域通配（如 *.qq.com）或高危后缀。"""
+    import re
+    mitm_cfg = yaml.safe_load((BASE_DIR / "config" / "mitm.yaml").read_text(encoding="utf-8")) or {}
+    deny_exact = {x.lower() for x in mitm_cfg.get("deny_exact", [])}
+    deny_suffix = tuple(x.lower() for x in mitm_cfg.get("deny_suffix", []))
+
+    def _allowed(h):
+        h = h.strip().lower()
+        if not h or h in deny_exact:
+            return False
+        bare = h.lstrip("*.")
+        if not bare or bare in deny_exact:
+            return False
+        return not any(bare == sfx or bare.endswith("." + sfx) for sfx in deny_suffix)
+
+    violations = []
+    targets = [QX_DIST / "profile.conf"] + sorted((QX_DIST / "rewrites").glob("*.conf")) + sorted((QX_DIST / "rewrites").glob("*.js"))
+    for p in targets:
+        if not p.exists():
+            continue
+        for m in re.finditer(r"^[ \t]*hostname[ \t]*=[ \t]*(.+)$", p.read_text(encoding="utf-8", errors="ignore"), re.M | re.I):
+            for raw_h in m.group(1).split(","):
+                h = raw_h.strip()
+                if h and not _allowed(h):
+                    violations.append((p.name, h))
+    return violations
+
+
 def build_report(sources, dead, conflicts, expected, stats, dups):
     now = datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M")
     lines = [
@@ -242,15 +287,25 @@ def main():
 
     dead, conflicts, expected, stats = lint(sources)
     dups = duplicates_within(sources)
+    reject_leaks = check_reject_vs_direct(sources)
+    mitm_violations = check_mitm_safety()
     report = build_report(sources, dead, conflicts, expected, stats, dups)
 
     print(f"规则源 {len(sources)} 个，规则 {sum(len(r) for _s, _t, r in sources)} 条，"
           f"被遮蔽 {len(dead)} 条（冲突 {len(conflicts)} / 预期 {len(expected)}），"
-          f"文件内重复 {len(dups)} 组")
+          f"文件内重复 {len(dups)} 组，reject 刺穿 {len(reject_leaks)} 条，MITM 违规 {len(mitm_violations)} 条")
     if conflicts:
         print("\n策略冲突（前 12 条）：")
         for c in conflicts[:12]:
             print(f"  {c['value']:<44} 应走 {c['target']:<12} 实际 {c['by_target']:<12} ← {c['by_rule']}")
+    if reject_leaks:
+        print("\nreject.list 反向刺穿 custom_direct（前 12 条）：")
+        for loc, rt, val, hit in reject_leaks[:12]:
+            print(f"  {loc:<24} {rt},{val} 刺穿直连域 {hit}")
+    if mitm_violations:
+        print("\nMITM hostname 违规（前 12 条）：")
+        for fn, h in mitm_violations[:12]:
+            print(f"  {fn:<24} {h}")
 
     if not args.no_write:
         if not DOCS_DIR.exists():
@@ -259,11 +314,14 @@ def main():
         out = DOCS_DIR / f"RULES_LINT_{stamp}.md"
         out.write_text(report, encoding="utf-8")
         print(f"\n报告已写入 {out.relative_to(BASE_DIR)}")
-    if args.strict and (conflicts or dups):
-        print(f"STRICT FAIL · 策略冲突 {len(conflicts)} / 文件内重复 {len(dups)}")
+    if args.strict and (conflicts or dups or reject_leaks or mitm_violations):
+        print(
+            f"STRICT FAIL · 策略冲突 {len(conflicts)} / 文件内重复 {len(dups)} / "
+            f"reject 刺穿 {len(reject_leaks)} / MITM 违规 {len(mitm_violations)}"
+        )
         return 1
     if args.strict:
-        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0")
+        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0 / reject 刺穿 0 / MITM 违规 0")
     return 0
 
 

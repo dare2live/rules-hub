@@ -93,7 +93,7 @@ def _expand_alternation(host):
     if not m:
         return [host]
     alts = m.group(1).split("|")
-    if not all(re.fullmatch(r"[A-Za-z0-9.\-]+", a) for a in alts):
+    if not all(re.fullmatch(r"[A-Za-z0-9.\-\\*]+", a) for a in alts):
         return [host[: m.start()] + host[m.end():]]
     out = []
     for a in alts:
@@ -101,8 +101,15 @@ def _expand_alternation(host):
     return out[:16]
 
 
+def _strip_unmatched_leading_parens(s):
+    """仅剥离包裹整条 URL 的未闭合外层左括号，绝不破坏 (a|b).foo.com 首标签交替组。"""
+    while s.startswith("(") and s.count("(") > s.count(")"):
+        s = s[1:]
+    return s
+
+
 def _host_to_mitm(host):
-    """把规则里的 host 片段转成 [mitm] hostname 条目（0 或 1 条）。"""
+    """把规则里的 host 片段转成 [mitm] hostname 条目（0 或多条）。"""
     if host in MITM_OVERRIDES:
         return MITM_OVERRIDES[host]
     h_raw = host.replace(r"\.", ".").replace(r"\-", "-").replace("\\", "")
@@ -116,17 +123,18 @@ def _host_to_mitm(host):
         return MITM_OVERRIDES[h]
     if MITM_HOST_RE.fullmatch(h):
         return [h]
-    # 含正则元字符：从右往左取连续的纯字母数字标签，作为域名后缀
+    # 含正则元字符：从右往左取连续的纯字母数字标签，完整保留所有确定的右缀子域
+    # （例如 .*\.reader\.qq\.com -> *.reader.qq.com，绝不退化成 *.qq.com 整域通配）
     keep = []
     for lab in reversed(h.split(".")):
         if re.fullmatch(r"[A-Za-z0-9\-]+", lab):
             keep.insert(0, lab)
         else:
             break
-    if len(keep) < 2:
+    min_labels = 3 if len(keep) >= 2 and ".".join(keep[-2:]) in MITM_MULTI_TLD else 2
+    if len(keep) < min_labels:
         return []
-    n = 3 if ".".join(keep[-2:]) in MITM_MULTI_TLD and len(keep) >= 3 else 2
-    suffix = ".".join(keep[-n:])
+    suffix = ".".join(keep)
     if not re.fullmatch(r"(?:[A-Za-z0-9\-]+\.)+[A-Za-z]{2,24}", suffix):
         return []
     return ["*." + suffix]
@@ -136,13 +144,63 @@ def mitm_allowed(host):
     """该主机是否允许 MITM。
 
     排除「无意义的通配目标」（*.com / *.cn，等于解密整个互联网），
-    以及 config/mitm.yaml 里 deny_suffix 列出的金融 / 12306 类主机。
+    以及 config/mitm.yaml 里 deny_suffix / deny_exact 列出的金融、政务、定位与超级 App 整域。
     """
     h = (host or "").strip().lower()
     if not h or h in MITM_DENY_EXACT:
         return False
-    bare = h[2:] if h.startswith("*.") else h
+    bare = h.lstrip("*.")
+    if not bare or bare in MITM_DENY_EXACT:
+        return False
     return not any(bare == sfx or bare.endswith("." + sfx) for sfx in MITM_DENY_SUFFIX)
+
+
+def normalize_mitm_token(h):
+    """清洗单条 inline hostname token 并映射上游非标通配。"""
+    h = re.sub(r":\d+$", "", (h or "").strip())
+    h = {
+        "*.kuwo.*": "*.kuwo.cn",
+        "*.xmcdn.*": "*.xmcdn.com",
+        "*.xima*.*": "*.ximalaya.com",
+        "*.flyert.*": "*.flyert.com",
+        "api-access.pangolin-sdk-toutiao.*com": "api-access.pangolin-sdk-toutiao.com",
+    }.get(h, h)
+    return h
+
+
+def sanitize_rewrite_content(content):
+    """清洗镜像重写文件内的 inline hostname 与高危 SSL Pinning 规则。
+
+    Quantumult X 加载 [rewrite_remote] 时会直接读取每个远程文件内部的 `hostname = ...`，
+    若不在此处同步按 mitm_allowed() 过滤，上游文件内置的 *.baidu.com / *.l.qq.com /
+    otheve.beacon.qq.com / 银行 / 12306 域名会绕过主配置 [mitm] 白名单直接触发 TLS 解密。
+    """
+    out_lines = []
+    for line in content.splitlines():
+        s = line.strip()
+        if (
+            not s.startswith(("#", ";", "//"))
+            and (" url " in s or " url-and-header " in s or "\turl " in s)
+        ):
+            low_s = s.lower()
+            if "otheve.beacon.qq.com" in low_s or any(sfx in low_s for sfx in MITM_DENY_SUFFIX):
+                out_lines.append(f";{line}")
+                continue
+        m_hn = re.match(r"^([ \t]*hostname[ \t]*=[ \t]*)(.+)$", line, flags=re.IGNORECASE)
+        if m_hn:
+            prefix, hn_str = m_hn.group(1), m_hn.group(2)
+            clean_hosts = []
+            seen_h = set()
+            for raw_h in hn_str.split(","):
+                h = normalize_mitm_token(raw_h)
+                if h and MITM_HOST_RE.fullmatch(h) and mitm_allowed(h) and h not in seen_h:
+                    seen_h.add(h)
+                    clean_hosts.append(h)
+            if clean_hosts:
+                out_lines.append(f"{prefix}{', '.join(clean_hosts)}")
+            continue
+        out_lines.append(line)
+    return "\n".join(out_lines) + ("\n" if content.endswith("\n") else "")
 
 
 def derive_mitm_hostnames(paths):
@@ -155,7 +213,7 @@ def derive_mitm_hostnames(paths):
             continue
         for line in text.splitlines():
             s = line.strip()
-            if s.startswith("#") or s.startswith("//"):
+            if s.startswith("#") or s.startswith("//") or s.startswith(";"):
                 continue
             if " url " not in s and " url-and-header " not in s and "\turl " not in s:
                 continue
@@ -166,12 +224,16 @@ def derive_mitm_hostnames(paths):
             rest = m.group(2).replace("(?:", "(")
             m_sep = re.search(r"\\?/|\\?\?|\$", rest)
             raw = rest[:m_sep.start()] if m_sep else rest
-            raw = re.sub(r"\(:\d+\)\??$", "", raw)
+            raw = re.sub(r"\(:\d+\)\??", "", raw)
             candidates = [raw]
-            for m_sub in re.finditer(r"(?:\([A-Za-z0-9.\-\|]+\)|[A-Za-z0-9\-]+)(?:\\\.[A-Za-z0-9\-]+)+(?=\\?/)", rest):
-                candidates.append(m_sub.group(0))
+            # 仅提取顶层 `|` 分支后的备选主机名（如 bdyybata1.js），绝不扫描路径段或主机后缀子串
+            for m_sub in re.finditer(
+                r"(?:^|\|)\(?(?:[A-Za-z0-9\-]+|\([A-Za-z0-9.\-\|]+\))(?:\\\.[A-Za-z0-9\-]+)+(?=\\?/)",
+                rest,
+            ):
+                candidates.append(m_sub.group(0).lstrip("|"))
             for cand in candidates:
-                cand = cand.lstrip("(")
+                cand = _strip_unmatched_leading_parens(cand)
                 for item in _expand_alternation(cand):
                     hosts.update(_host_to_mitm(item))
 
@@ -1228,6 +1290,9 @@ def build_rewrites(config):
         if n_scripts:
             print(f"   📦 [Rewrites] {rw_id}: 镜像 {n_scripts} 个内联脚本")
 
+        # 清洗镜像文件内部的 inline hostname 与高危 SSL Pinning 规则（如 otheve.beacon.qq.com / *.baidu.com / 银行域名）
+        content = sanitize_rewrite_content(content)
+
         # Save to distribution
         with open(dest_file, "w", encoding="utf-8") as out:
             out.write(content)
@@ -1244,13 +1309,7 @@ def build_rewrites(config):
             hn_matches = re.findall(r'^[ 	]*hostname[ 	]*=[ 	]*(.+)$', content, flags=re.MULTILINE)
             for hn_str in hn_matches:
                 for h in hn_str.split(","):
-                    h = re.sub(r":443$", "", h.strip())
-                    h = {
-                        "*.kuwo.*": "*.kuwo.cn",
-                        "*.xmcdn.*": "*.xmcdn.com",
-                        "*.flyert.*": "*.flyert.com",
-                        "api-access.pangolin-sdk-toutiao.*com": "api-access.pangolin-sdk-toutiao.com",
-                    }.get(h, h)
+                    h = normalize_mitm_token(h)
                     if h:
                         all_hostnames.add(h)
                     
@@ -2618,11 +2677,14 @@ def main():
             
     # 2. Extract immunity set (unbreak & direct domains that must never be blocked by reject)
     immunity_set = set()
+    direct_immunity_set = set()
     for rel_path in ("rules/unbreak.txt", "rules/direct.txt"):
         for line in local_data.get(rel_path, []):
             d = extract_domain(line)
             if d:
                 immunity_set.add(d)
+                if rel_path == "rules/direct.txt":
+                    direct_immunity_set.add(d)
 
     # 3. Process each rule source: merge local + upstream, normalize, deduplicate & filter
     def _rule_matches_value(prev_type, prev_val, cur_val):
@@ -2679,9 +2741,15 @@ def main():
             dval = parts[1].lower() if len(parts) >= 2 and rtype in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD") else None
 
             # Immunity protection: NEVER let upstream advertising block user whitelist or direct domains
-            if is_reject and not r.get("skip_immunity"):
-                d = extract_domain(norm)
-                if d and (d in immunity_set or any(d.endswith("." + imm) for imm in immunity_set)):
+            # (Covers DOMAIN, DOMAIN-SUFFIX, and DOMAIN-KEYWORD rules from upstream Advertising.list,
+            #  such as HOST-KEYWORD,apiinit.amap.com / mapi.m.jd.com / ynuf.alipay.com / _vmind.qqvideo.tc.qq.com)
+            if is_reject and not r.get("skip_immunity") and dval:
+                if (
+                    dval in immunity_set
+                    or any(dval.endswith("." + imm) for imm in immunity_set)
+                    or any(imm.endswith("." + dval) for imm in direct_immunity_set)
+                    or (rtype == "DOMAIN-KEYWORD" and any(dval in imm for imm in direct_immunity_set))
+                ):
                     continue
 
             # Upstream pool filtering: skip upstream rules (or broader rules) already covered by earlier lists or earlier rules in the same list

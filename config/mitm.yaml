@@ -77,15 +77,12 @@ overrides:
     - interface.music.163.com
     - interface3.music.163.com
 
-# 银行 / 支付 / 12306 不解密。
+# 银行 / 支付 / 12306 / 政务 / 微信与企业微信核心定位与安全域 不解密。
 #
-# 这不是「防广告」，是防「MITM 失败的后果」：这几类的证书校验一旦出问题，
-# 后果是 App 打不开、付不了款，比多一个开屏广告严重得多。
-# 其余类别（政务、苹果、微信）不做排除 —— 实测拦掉的都是广告位域名，
-# 为了「万一」放弃拦截不划算。
+# 这不是「防广告」，是防「MITM 失败的后果」：这几类的证书校验（SSL Pinning）一旦触发，
+# 后果是 App 打不开、付不了款、或企业微信打卡定位在获得初步坐标后立即因证书校验失败报「定位失败」。
 #
-# 注意粒度：这里写的是后缀，命中推导出的具体主机（如 adv.ccb.com）。
-# 推导不会产生 *.ccb.com 这种整域通配，所以不会把整个银行解密掉。
+# 注意粒度：这里写的是后缀，命中推导出的具体主机（如 adv.ccb.com / otheve.beacon.qq.com）。
 deny_suffix:
   # 银行
   - bankcomm.com
@@ -96,6 +93,7 @@ deny_suffix:
   - spdb.com.cn
   - icbc.com.cn
   - abchina.com
+  - abchina.com.cn
   - boc.cn
   - cmbchina.com
   - psbc.com
@@ -104,8 +102,17 @@ deny_suffix:
   - 95516.com
   - alipay.com
   - tenpay.com
-  # 出行凭证
+  # 出行凭证 & 政务
   - 12306.cn
+  - gov.cn
+  # 企业微信 / 微信安全 / 腾讯地图定位 SDK / 灯塔 SDK（开启 SSL Pinning，MITM 会导致企业微信打卡定位失败）
+  - work.weixin.qq.com
+  - qyapi.weixin.qq.com
+  - map.qq.com
+  - beacon.qq.com
+  - weixin110.qq.com
+  - wechat.com
+  - servicewechat.com
 deny_exact:
   - '*.com.cn'
   - '*.net.cn'
@@ -113,13 +120,62 @@ deny_exact:
   - '*.gov.cn'
   - '*.com'
   - '*.cn'
-  # 禁止国内高频超级 App 整域通配（具体业务接口已由 overrides 精确指定）
+  # 禁止国内高频超级 App 整域通配与裸主域（具体业务接口已由 overrides 或精确子域指定）
+  - '*.qq.com'
+  - 'qq.com'
+  - '*.l.qq.com'
+  - 'l.qq.com'
+  - '*.weixin.qq.com'
+  - 'weixin.qq.com'
+  - '*.tencent.com'
+  - 'tencent.com'
+  - '*.myqcloud.com'
+  - 'myqcloud.com'
+  - '*.qcloud.com'
+  - 'qcloud.com'
   - '*.baidu.com'
+  - 'baidu.com'
+  - '*.pcs.baidu.com'
+  - 'pcs.baidu.com'
   - '*.meituan.com'
+  - 'meituan.com'
+  - '*.meituan.net'
+  - 'meituan.net'
   - '*.iqiyi.com'
+  - 'iqiyi.com'
   - '*.amap.com'
+  - 'amap.com'
+  - '*.autonavi.com'
+  - 'autonavi.com'
+  - '*.amap.cn'
+  - 'amap.cn'
   - '*.eastmoney.com'
+  - 'eastmoney.com'
   - '*.goofish.com'
+  - 'goofish.com'
   - '*.weibo.com'
+  - 'weibo.com'
   - '*.weibo.cn'
+  - 'weibo.cn'
   - '*.163.com'
+  - '163.com'
+  - '*.jd.com'
+  - 'jd.com'
+  - '*.taobao.com'
+  - 'taobao.com'
+  - '*.tmall.com'
+  - 'tmall.com'
+  - '*.xiaohongshu.com'
+  - 'xiaohongshu.com'
+  - '*.rnote.com'
+  - 'rnote.com'
+  - '*.youtube.com'
+  - 'youtube.com'
+  - '*.spotify.com'
+  - 'spotify.com'
+  - '*.apple.com'
+  - 'apple.com'
+  - '*.icloud.com'
+  - 'icloud.com'
+  - 'caixin.com'
+  - 'elemecdn.com'
