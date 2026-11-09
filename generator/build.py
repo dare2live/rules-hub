@@ -2020,7 +2020,7 @@ def build_clash(config, rule_data):
     L.append("  # 把「代理服务器自己的公网 IP」也放进直连，避免流量绕回自己形成环路。")
     L.append("  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。")
     L.append("  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve")
-    L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,cctv.lifehackers.cc,Proxy")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
 
     L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
@@ -2310,7 +2310,7 @@ def generate_personal_clash_config(config, rule_data):
         if _n["server"] not in seen_servers:
             seen_servers.append(_n["server"])
             L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
-    L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
+    L.append("  - DOMAIN,cctv.lifehackers.cc,Proxy")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
     for r in config["rule_sources"]:
         if r.get("type") == "GEOIP":
