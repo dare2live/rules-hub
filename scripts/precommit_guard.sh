@@ -4,15 +4,22 @@
 # 用法：
 #   scripts/precommit_guard.sh            # 扫 git diff --cached（pre-commit 钩子模式）
 #   scripts/precommit_guard.sh --all      # 扫当前 HEAD 全量已入库文件（CI 模式）
+#   scripts/precommit_guard.sh --staged-and-worktree
+#                                          # 暂存区 + 工作区改动 + 未跟踪文件（ship 模式）
 #
 # 规则源：config/privacy_patterns.txt（唯一一份，三层共用）
-# 输出只给 文件:行号:规则名，命中值一律打码；退出码 1 = 拒绝。
+# 输出只给 文件:行号:规则名，命中值一律打码；退出码 1 = 拒绝，2 = 参数非法。
+# 未知参数不再静默降级为 staged —— 那会漏扫工作区。
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 PY="/usr/bin/python3"
-MODE="staged"
-[ "${1:-}" = "--all" ] && MODE="all"
+case "${1:-}" in
+  "") MODE="staged" ;;
+  "--all") MODE="all" ;;
+  "--staged-and-worktree") MODE="staged_and_worktree" ;;
+  *) echo "precommit_guard: 未知参数 '$1'（仅支持 --all / --staged-and-worktree）" >&2; exit 2 ;;
+esac
 "$PY" - "$ROOT" "$MODE" <<'PY'
 import ipaddress, os, re, subprocess, sys
 
@@ -47,9 +54,17 @@ allow = set(rules.get("allow_ip", []))
 def git(*args):
     return sh(["git", *args])
 
+staged_paths, worktree_paths, paths = [], [], []
 if mode == "staged":
     rc, names = git("diff", "--cached", "--name-only", "--diff-filter=ACMR")
     paths = [p for p in names.splitlines() if p]
+elif mode == "staged_and_worktree":
+    rc, s = git("diff", "--cached", "--name-only", "--diff-filter=ACMR")
+    _, w = git("diff", "--name-only")
+    _, u = git("ls-files", "--others", "--exclude-standard")
+    staged_paths = [p for p in s.splitlines() if p]
+    worktree_paths = sorted({p for p in (w + "\n" + u).splitlines() if p})
+    paths = sorted(set(staged_paths) | set(worktree_paths))
 else:
     rc, names = git("ls-files")
     paths = [p for p in names.splitlines() if p]
@@ -93,6 +108,19 @@ if mode == "staged":
         rc, blob = sh(["git", "show", ":" + p])
         if rc == 0:
             scan_text(p, blob)
+elif mode == "staged_and_worktree":
+    for p in staged_paths:
+        rc, blob = sh(["git", "show", ":" + p])
+        if rc == 0:
+            scan_text(p, blob)
+    for p in worktree_paths:
+        full = os.path.join(root, p)
+        if not os.path.isfile(full) or os.path.getsize(full) > 2_000_000:
+            continue
+        try:
+            scan_text(p, open(full, encoding="utf-8", errors="ignore").read())
+        except OSError:
+            continue
 else:
     for p in paths:
         full = os.path.join(root, p)
