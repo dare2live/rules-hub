@@ -1,0 +1,244 @@
+{
+  "generated_at": "2026-11-10T19:47:53",
+  "resources": {
+    "body/clash.yaml": {
+      "count": 314,
+      "kind": "config_body",
+      "path": "Clash_Personal.yaml",
+      "sha256": "35a634ce386d9a369bdd30cd06d5e4590f10e13aa99af959aca410dc49685055",
+      "url": "workers.dev/<token>/clash.yaml"
+    },
+    "body/qx.conf": {
+      "count": 379,
+      "kind": "config_body",
+      "path": "QuantumultX_Personal.conf",
+      "sha256": "716897dda1f5e27ad5efea3843ab3c38bcb12b01e3a4a71d6344cc2392a5200f",
+      "url": "workers.dev/<token>/qx.conf"
+    },
+    "kv/module.conf": {
+      "count": 664,
+      "kind": "kv_module",
+      "path": "dist/clash/module.conf",
+      "sha256": "be455b8c064869e7a47b3dc643b3c5b33617b2b8a6ac9f03b77efa02010dfb63",
+      "url": "workers.dev/<token>/module.conf"
+    },
+    "qx/adblock_cn.list": {
+      "count": 17,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/adblock_cn.list",
+      "sha256": "be9fdc7f523a485db88c7234dffa703ba4190e31dca9869d32895e8b72d79224",
+      "url": "https://dare2live.github.io/rules-hub/qx/adblock_cn.list"
+    },
+    "qx/adblock_intl.list": {
+      "count": 43,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/adblock_intl.list",
+      "sha256": "fd80ce7495e11e9c5ee53e08f0185e157af997697683d54b4fd2ed37532971b5",
+      "url": "https://dare2live.github.io/rules-hub/qx/adblock_intl.list"
+    },
+    "qx/claude.list": {
+      "count": 8,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/claude.list",
+      "sha256": "7211faf500311c69e533e4ba824c803348cd86d9da3f7c9726385b924aa8ecdd",
+      "url": "https://dare2live.github.io/rules-hub/qx/claude.list"
+    },
+    "qx/custom_direct.list": {
+      "count": 182,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/custom_direct.list",
+      "sha256": "5b30f9dd66c4b50cd46dbb24970c043207ea77a5d7cdf8ac665cafdb29dadd1b",
+      "url": "https://dare2live.github.io/rules-hub/qx/custom_direct.list"
+    },
+    "qx/geoip_cn.list": {
+      "count": 12,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/geoip_cn.list",
+      "sha256": "a833878840db5d68ff815ea9e55961850bbaa5a868d0b2a99cf2201d4b28c111",
+      "url": "https://dare2live.github.io/rules-hub/qx/geoip_cn.list"
+    },
+    "qx/google_ai.list": {
+      "count": 30,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/google_ai.list",
+      "sha256": "1141bb8a5e44d6ab97b949600a3def6bb1ff6fc5b2363f2bf802c8b4e6e6abde",
+      "url": "https://dare2live.github.io/rules-hub/qx/google_ai.list"
+    },
+    "qx/media.list": {
+      "count": 264,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/media.list",
+      "sha256": "78dd39ce6a83498d882126462710f93e87a0a9f491eb4dc7d2bebf3a8f053e86",
+      "url": "https://dare2live.github.io/rules-hub/qx/media.list"
+    },
+    "qx/openai.list": {
+      "count": 35,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/openai.list",
+      "sha256": "d095294a38f97d2d6e62c54eac85bdc16d276b5568da4e42625aa9f48b43545d",
+      "url": "https://dare2live.github.io/rules-hub/qx/openai.list"
+    },
+    "qx/proxy.list": {
+      "count": 4418,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/proxy.list",
+      "sha256": "318ad14e0a7f60856eb35378d31317e8fec7fb042e7e328448db3e992f855572",
+      "url": "https://dare2live.github.io/rules-hub/qx/proxy.list"
+    },
+    "qx/reject.list": {
+      "count": 239,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/reject.list",
+      "sha256": "4f1979ed80745a1a4d4ec114315b4d5055431561ed6e6544025cf703a05e32a1",
+      "url": "https://dare2live.github.io/rules-hub/qx/reject.list"
+    },
+    "qx/rewrites/AmapBlock.conf": {
+      "count": 57,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/AmapBlock.conf",
+      "sha256": "f590c4348a84a2c401aa952439655f9fbf5661d3000061f373b028f12c4cb653",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/AmapBlock.conf"
+    },
+    "qx/rewrites/GoofishAds.conf": {
+      "count": 45,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/GoofishAds.conf",
+      "sha256": "f352cc288a3c84b9847a7c0a1b116a1f30916cdd4389210e790c70f3162e133d",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/GoofishAds.conf"
+    },
+    "qx/rewrites/StartUpAds.conf": {
+      "count": 979,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/StartUpAds.conf",
+      "sha256": "7358b7f4f8c799d4c8fed2f18898594e562c5cf902ee11573e41baeab678191c",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/StartUpAds.conf"
+    },
+    "qx/rewrites/WeiboAds.conf": {
+      "count": 192,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/WeiboAds.conf",
+      "sha256": "a7e57eb6c69df6bdb34291204827d10b407d6a8faf1c80c0047c38c3dd8f4e2f",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/WeiboAds.conf"
+    },
+    "qx/rewrites/XiaoHongShuAds.conf": {
+      "count": 43,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/XiaoHongShuAds.conf",
+      "sha256": "1ca8e7f396feb83f82aa1b61c59ff9902679ebf90350404d62a327140ac171ab",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/XiaoHongShuAds.conf"
+    },
+    "qx/rewrites/Ximalaya.conf": {
+      "count": 64,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/Ximalaya.conf",
+      "sha256": "15a412b0a198d49e67c11d87f9fba69050d191f12bdc9a35cac34ae4212b36a2",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/Ximalaya.conf"
+    },
+    "qx/rewrites/XueQiuAds.conf": {
+      "count": 26,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/XueQiuAds.conf",
+      "sha256": "f9127c7b6e037b4698349402187a897e605c922d8959c9586c6fa38f199e71cf",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/XueQiuAds.conf"
+    },
+    "qx/rewrites/YoutubeAds.conf": {
+      "count": 23,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/YoutubeAds.conf",
+      "sha256": "3726f7d56587eb01bcd2306446e72f4d87e40dd6496aee4e9636bfc633f7b77a",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/YoutubeAds.conf"
+    },
+    "qx/rewrites/amap.trim.v6.js": {
+      "count": 320,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/amap.trim.v6.js",
+      "sha256": "923fe6342acb0480e97c3cc72f677726ef570d6acbd51287676a0b9d19c85309",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/amap.trim.v6.js"
+    },
+    "qx/rewrites/bdyybata1.js": {
+      "count": 21,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/bdyybata1.js",
+      "sha256": "768574a1050a7264a9982d6cceb395a734ced8ebe24bad8a5a8bdd78d086091e",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/bdyybata1.js"
+    },
+    "qx/rewrites/bloomberg.js": {
+      "count": 44,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/bloomberg.js",
+      "sha256": "9827e4fdad6eeab1e1998a4713b96bc74e1d04c7c41c42d0f03fc25b8b1e63bc",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/bloomberg.js"
+    },
+    "qx/rewrites/fotmob-plus.js": {
+      "count": 108,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/fotmob-plus.js",
+      "sha256": "56a04b35a9d0a83ba0d003c95dc7f0070acd409e29fdd4222843c15abb32b01b",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/fotmob-plus.js"
+    },
+    "qx/rewrites/missav.clean.v5.js": {
+      "count": 173,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/missav.clean.v5.js",
+      "sha256": "cec3d9e4c10f88628966a46071ceb080fa71436d5893a06e77afffd50111cb3d",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/missav.clean.v5.js"
+    },
+    "qx/rewrites/panda.js": {
+      "count": 22,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/panda.js",
+      "sha256": "bcb36d23d2a2b78dbbaf1e72e003050faa28662a01a2ee89314636fffa4282a9",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/panda.js"
+    },
+    "qx/rewrites/spotify.conf": {
+      "count": 7,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/spotify.conf",
+      "sha256": "341c1819251ee1ef423ccfe3f20199de5e36c41ab7b07bd2f702c688531cef69",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/spotify.conf"
+    },
+    "qx/rewrites/xcz.js": {
+      "count": 18,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/xcz.js",
+      "sha256": "b520969c299bd3d4331452b0ae121def340189cfcde0776da3a9a8b5b774c371",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/xcz.js"
+    },
+    "qx/rewrites/youpume.v2.js": {
+      "count": 34,
+      "kind": "qx_rewrite",
+      "path": "dist/qx/rewrites/youpume.v2.js",
+      "sha256": "c46939ee3ea2e38bc7e4d94cfcbfd2f1a020d08dc672f16982f5ec1b2b6f5e3b",
+      "url": "https://dare2live.github.io/rules-hub/qx/rewrites/youpume.v2.js"
+    },
+    "qx/tiktok.list": {
+      "count": 36,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/tiktok.list",
+      "sha256": "5fce35dd7ac3a11df6f82d2e977cd60f2e63729f7a825963228b2de9db467aab",
+      "url": "https://dare2live.github.io/rules-hub/qx/tiktok.list"
+    },
+    "qx/unbreak.list": {
+      "count": 45,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/unbreak.list",
+      "sha256": "988a7ff181434465b32d3de9b96e4e747813762420b7db1618679a61d6f80415",
+      "url": "https://dare2live.github.io/rules-hub/qx/unbreak.list"
+    },
+    "qx/workbuddy.list": {
+      "count": 10,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/workbuddy.list",
+      "sha256": "c59fa7dd25284ac9d1daf00f9e61b31c42c92e8d6cb88442c9d33317f32eb997",
+      "url": "https://dare2live.github.io/rules-hub/qx/workbuddy.list"
+    },
+    "qx/workbuddy_cn.list": {
+      "count": 18,
+      "kind": "qx_ruleset",
+      "path": "dist/qx/workbuddy_cn.list",
+      "sha256": "6fdaada0301097fbdc1689274ac6d62fa4947de64befeb26c35051b785a579a0",
+      "url": "https://dare2live.github.io/rules-hub/qx/workbuddy_cn.list"
+    }
+  },
+  "schema": 1
+}
