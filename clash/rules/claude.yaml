@@ -1,0 +1,10 @@
+# Claude & Anthropic 全生态
+# 由 rules-hub 自动生成，勿手改。
+# 同源规则：Surge / Quantumult X / Clash 三端内容一致。
+payload:
+  - 'DOMAIN-SUFFIX,claude.ai'
+  - 'DOMAIN-SUFFIX,claude.com'
+  - 'DOMAIN-SUFFIX,clau.de'
+  - 'DOMAIN-SUFFIX,claudeusercontent.com'
+  - 'DOMAIN-SUFFIX,anthropic.com'
+  - 'DOMAIN,cdn.usefathom.com'

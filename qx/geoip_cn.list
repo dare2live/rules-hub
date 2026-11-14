@@ -1,0 +1,13 @@
+# 局域网与国内 IP 兜底直连（Quantumult X）
+# Source: Rules Hub
+#
+# 必须排在 [filter_remote] 的最后一条：它的作用是「前面所有域名规则都没命中时」，
+# 而不是「优先判断」。放到前面会触发同步 DNS 解析并架空所有业务分组。
+
+ip-cidr, 10.0.0.0/8, direct
+ip-cidr, 127.0.0.0/8, direct
+ip-cidr, 172.16.0.0/12, direct
+ip-cidr, 192.168.0.0/16, direct
+ip-cidr, 100.64.0.0/10, direct
+ip-cidr, 224.0.0.0/24, direct
+geoip, cn, direct
