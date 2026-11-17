@@ -27,6 +27,19 @@ DOMAIN-SUFFIX,amap.cn
 # 内联最高优先级直连，订阅抖动也不受影响；刷配置后手机/ Surge / Clash / 小火箭 同时生效。
 DOMAIN-SUFFIX,rdssolution.com
 
+# 国内邮箱 IMAP/SMTP/POP 服务器（邮件客户端走 993/465/143/25，掉 final 会被判「异地登录」）
+# 139 邮箱（中国移动）：主域 + 10086 备用服务器域
+DOMAIN-SUFFIX,139.com
+DOMAIN-SUFFIX,10086.cn
+# 网易 yeah.net 免费邮箱
+DOMAIN-SUFFIX,yeah.net
+# Outlook 只放行邮件客户端服务器主机（不整域放行 outlook.com/office365.com/live.com，
+# 避免波及 Microsoft 账户/Xbox/Skype 等本应走代理的国际服务）
+DOMAIN,imap-mail.outlook.com
+DOMAIN,smtp-mail.outlook.com
+DOMAIN,pop-mail.outlook.com
+DOMAIN,outlook.office365.com
+
 # 比亚迪 (BYD) 车联、车机与云服务（从 direct.txt 移来）
 # 这里的规则会被内联进 [filter_local]，优先级高于所有远程订阅；
 # BYD App 会轮换使用多个云端域名，且对出口 IP 地区敏感，
