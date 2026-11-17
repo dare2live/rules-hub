@@ -674,6 +674,19 @@ def build_surge(config, rule_data):
     
     # Rules section
     profile.append("[Rule]")
+    # 局域网与私有直连规则必须排在 PROCESS-NAME 之前！
+    # 否则 Gemini / agy / Claude 等进程访问本机 (127.0.0.1:18990) 或局域网 (192.168.50.x) 时，
+    # 会先命中 PROCESS-NAME 被强行送往远端 VPS 节点，导致内置浏览器/本地通信打不开。
+    local_rules = CFG_SURGE_LOCAL.get("local_rules", [])
+    if local_rules:
+        profile.append("# > 局域网与自己的服务器：直连，不绕道（最高优先级，防 PROCESS-NAME 劫持本地流量）")
+        for line in local_rules:
+            profile.append(line)
+        profile.append("")
+    else:
+        profile.append("RULE-SET,LAN,DIRECT")
+        profile.append("")
+
     profile.append("# > 进程级优先规则 (Surge Mac 专享防漏双保险)")
     for r in config["rule_sources"]:
         target = r.get("target")
@@ -685,14 +698,6 @@ def build_surge(config, rule_data):
             continue
         for proc in r.get("process", []):
             profile.append(f"PROCESS-NAME,{proc},{target}")
-
-    # 私有直连规则：只有本机构建才有，绝不会出现在公开产物里
-    local_rules = CFG_SURGE_LOCAL.get("local_rules", [])
-    if local_rules:
-        profile.append("")
-        profile.append("# > 局域网与自己的服务器：直连，不绕道")
-        for line in local_rules:
-            profile.append(line)
 
     profile.append("")
     profile.append("# > 模块化分流规则集 (通过本 Hub 远程订阅)")
@@ -719,29 +724,19 @@ QX_ICONS = dict(CFG_QX["icons"])
 
 
 def build_qx_policy_block(config, node_tags):
-    """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。"""
+    """从 config.yaml 派生 QX 策略组，自动剔除当前不存在的节点，避免导入时报引用错误。
+
+    2026-11-14 策略组统一规范：
+      · 每个业务策略组均包含内置 `proxy`（在 QX 界面显示为 `Proxy`，跟随顶部主节点选择）、
+        `direct`（直连）以及全部真实存在的自建节点（Lightsail Singapore / Oracle San Jose / Google Oregon）；
+      · 不再生成名不副实的 `static=自动选择` 冗余组；
+      · 各组默认首选项由 config.yaml 的 qx_default 决定。
+    """
     policies = {p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"}
     order = list(CFG_QX["policy_order"])
     names = {k: QX_NAME_MAP.get(k, k) for k in policies}
     node_set = set(node_tags)
     lines = []
-
-    # 「自动选择」必须排在引用它的组之前，否则是前向引用。
-    # 之前它被放在最后且没有任何组引用 —— 等于一个永远用不到的死组。
-    #
-    # server-tag-regex 绝不能写 .*：server_remote 里可能挂着公共免费订阅，
-    # .* 会把那几十个陌生人维护的节点一并纳入测速，只要它延迟低就被自动切过去，
-    # 流量等于从别人机器上过。这里只锁死 server_local 里的自建节点。
-    auto_group = "自动选择"
-    has_auto = bool(node_tags)
-    if has_auto:
-        # 关掉后台测速：url-latency-benchmark 会按 check-interval 周期性直连所有真实 IP，
-        # 自建单节点没有「节点池互相替换」的前提，纯属给墙发信标。
-        # 改成 static（手动选择）后，节点照样在组里、照样能手动切，只是不再自动探测。
-        # 与原 user_qx_input.txt 注释里「把 url-latency-benchmark 替换成 static 即可手动选择」一致。
-        lines.append(
-            f"static=自动选择, {', '.join(node_tags)}, img-url={QX_ICONS['自动选择']}"
-        )
 
     for key in order:
         p = policies.get(key)
@@ -757,6 +752,8 @@ def build_qx_policy_block(config, node_tags):
                 mm = "direct"
             elif mu == "REJECT":
                 mm = "reject"
+            elif mu == "PROXY":
+                mm = "proxy"
             elif m in names:
                 mm = names[m]
             elif m in node_set:
@@ -767,41 +764,33 @@ def build_qx_policy_block(config, node_tags):
                 continue
             if mm not in members:
                 members.append(mm)
-        # 兜底组（全球加速）末尾挂上自动选择，节点劣化时不用手改
-        if key == "Proxy" and has_auto and auto_group not in members:
-            members.append(auto_group)
-        # 每个组末尾补齐 direct；仅当组内尚未包含「全球加速」时才补内置 proxy，
-        # 避免业务组同时出现「全球加速」和「proxy」两个同义代理入口。
-        if "全球加速" not in members and name != "全球加速" and "proxy" not in members:
-            members.append("proxy")
-        elif name == "全球加速" and not node_tags and "proxy" not in members:
+        # 确保每个策略组都具备 proxy（跟随顶部主 Proxy）、direct 以及全部可用节点
+        for n_tag in node_tags:
+            if n_tag not in members:
+                members.append(n_tag)
+        if "proxy" not in members:
             members.append("proxy")
         if "direct" not in members:
             members.append("direct")
-        # 默认选中项 = 成员列表的第一个。
-        # config.yaml 里用 qx_default 指定，避免把「哪组默认走哪」写死在代码里。
-        # 取值可以是节点名、内置策略（proxy / direct / reject）、或别的策略组名。
-        #
-        # 顺序是硬的：必须排在补齐内置策略之后。否则 qx_default 写成 proxy / direct
-        # 时它还不在 members 里，下面这段会静默什么都不做。
+
         default_first = p.get("qx_default")
         if default_first:
             df = {
                 "DIRECT": "direct",
                 "REJECT": "reject",
-                "Proxy": names.get("Proxy", "Proxy"),
+                "Proxy": "proxy",
+                "proxy": "proxy",
             }.get(default_first, default_first)
             if df in members:
                 members.remove(df)
                 members.insert(0, df)
         if not members:
-            members = ["proxy"]
-        name = names[key]
+            members = ["proxy", "direct"]
         icon = QX_ICONS.get(name)
         lines.append(f"static={name}, {', '.join(members)}" + (f", img-url={icon}" if icon else ""))
 
     tail = []
-    for t in ["全球加速", "direct"] + list(node_tags):
+    for t in ["proxy", "全球加速", "direct"] + list(node_tags):
         if t not in tail:
             tail.append(t)
     lines.append(f"static=兜底分流, {', '.join(tail)}, img-url={QX_ICONS['兜底分流']}")
@@ -974,8 +963,10 @@ def build_qx(config, rule_data, produced=None):
     qx.append("")
     qx.append("[general]")
     qx.append("excluded_routes=192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, 127.0.0.0/8")
+    qx.append("udp_whitelist=1-442, 444-65535")
+    qx.append("udp_drop_list=443")
     qx.append("server_check_url=http://connectivitycheck.gstatic.com/generate_204")
-    qx.append("server_check_timeout=3000")
+    qx.append("server_check_timeout=5000")
     qx.append("")
     qx.append("[dns]")
     qx.extend(build_qx_dns_lines())
@@ -1790,8 +1781,8 @@ def build_router(config, rule_data):
     FANCYSS_DIST.mkdir(parents=True, exist_ok=True)
     base_url = config["meta"]["base_url"]
 
-    # 1. Custom Whitelist (Always DIRECT on router)
-    direct_lines = rule_data.get("rules/direct.txt", [])
+    # 1. Custom Whitelist (Always DIRECT on router: 合并 unbreak.txt 与 direct.txt，防止 unbreak 里的 cctv.lifehackers.cc 等被漏掉)
+    direct_lines = rule_data.get("rules/unbreak.txt", []) + rule_data.get("rules/direct.txt", [])
     whitelist_domains = extract_domains_for_router(direct_lines)
 
     # 2. Custom Blacklist / GFWList (Always PROXY on router)
@@ -2154,17 +2145,9 @@ def build_clash(config, rule_data):
         L.append(f"    path: ./rules/{rule_id}.yaml")
     L.append("")
 
-    # rules：顺序与 Surge 完全一致，三端行为才能对齐
+    # rules：顺序与 Surge 完全一致，局域网与私有直连排在 PROCESS-NAME 之前
     L.append("rules:")
-    L.append("  # ===== 1. 进程级（macOS 专享，域名规则漏了也能兜住）=====")
-    for r in config["rule_sources"]:
-        plats = r.get("process_platforms")
-        if plats and "clash" not in plats:
-            continue
-        for proc in r.get("process", []):
-            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
-
-    L.append("  # ===== 2. 局域网与自己的服务器：直连，不绕道 =====")
+    L.append("  # ===== 1. 局域网与自己的服务器：直连，不绕道（防 PROCESS-NAME 劫持本地流量）=====")
     for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
                  "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"):
         L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
@@ -2174,6 +2157,14 @@ def build_clash(config, rule_data):
     L.append("  # 真实 IP 由个人配置生成时填入，公开示例里用 TEST-NET-3 占位。")
     L.append("  - IP-CIDR,203.0.113.10/32,DIRECT,no-resolve")
     L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
+
+    L.append("  # ===== 2. 进程级（macOS 专享，域名规则漏了也能兜住）=====")
+    for r in config["rule_sources"]:
+        plats = r.get("process_platforms")
+        if plats and "clash" not in plats:
+            continue
+        for proc in r.get("process", []):
+            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
 
     L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
@@ -2442,15 +2433,7 @@ def generate_personal_clash_config(config, rule_data):
     L.append("")
 
     L.append("rules:")
-    # 与 Surge 侧一致：process_platforms 声明「这条进程规则只在哪些端有效」。
-    # macOS 上 WorkBuddy 两个客户端的可执行文件都叫 Electron，Clash 的 PROCESS-NAME
-    # 同样匹配不到，写出来只是死规则 —— 这类必须按端过滤。
-    for r in config["rule_sources"]:
-        plats = r.get("process_platforms")
-        if plats and "clash" not in plats:
-            continue
-        for proc in r.get("process", []):
-            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
+    # 局域网与自己的节点服务器必须排在 PROCESS-NAME 之前，防止本地流量被 PROCESS-NAME 劫持到远端节点
     for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
                  "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"):
         L.append(f"  - IP-CIDR,{cidr},DIRECT,no-resolve")
@@ -2465,6 +2448,15 @@ def generate_personal_clash_config(config, rule_data):
             seen_servers.append(_n["server"])
             L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
     L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
+    # 与 Surge 侧一致：process_platforms 声明「这条进程规则只在哪些端有效」。
+    # macOS 上 WorkBuddy 两个客户端的可执行文件都叫 Electron，Clash 的 PROCESS-NAME
+    # 同样匹配不到，写出来只是死规则 —— 这类必须按端过滤。
+    for r in config["rule_sources"]:
+        plats = r.get("process_platforms")
+        if plats and "clash" not in plats:
+            continue
+        for proc in r.get("process", []):
+            L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
     # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
     for r in config["rule_sources"]:
         if r.get("type") == "GEOIP":

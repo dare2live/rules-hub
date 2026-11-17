@@ -102,11 +102,28 @@ def load_token(rotate=False):
 
 
 def read_oauth_token():
-    """从 wrangler 的登录态里读 OAuth token（curl 兜底用，不打印）。"""
+    """优先读取具备 KV 权限的 CLOUDFLARE_API_TOKEN（环境变量或 macOS Keychain），否则从 wrangler 登录态读 OAuth token。"""
+    cands = []
+    env_tok = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+    if env_tok:
+        cands.append(env_tok)
+    try:
+        r = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-s", "CLOUDFLARE_API_TOKEN", "-w"],
+            capture_output=True, text=True, timeout=5
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            cands.append(r.stdout.strip())
+    except Exception:
+        pass
+    for tok in cands:
+        code, body = cf_api("GET", "https://api.cloudflare.com/client/v4/accounts", tok, timeout=10)
+        if code == "200" and re.search(r'"id"\s*:\s*"([0-9a-f]{32})"', body):
+            return tok
     if not WRANGLER_CONFIG.exists():
-        return None
+        return cands[0] if cands else None
     m = re.search(r'oauth_token\s*=\s*"([^"]+)"', WRANGLER_CONFIG.read_text())
-    return m.group(1) if m else None
+    return m.group(1) if m else (cands[0] if cands else None)
 
 
 def cf_api(method, url, token, data=None, timeout=60):
@@ -150,14 +167,18 @@ def kv_put_curl(namespace_id, key, path, token):
 
 
 def kv_put(namespace_id, key, path):
+    env = os.environ.copy()
+    extra_paths = ["/opt/homebrew/bin", "/usr/local/bin"]
+    env["PATH"] = ":".join(extra_paths + [env.get("PATH", "")])
+    wrangler_bin = shutil.which("wrangler", path=env["PATH"]) or "wrangler"
     cmd = [
-        "wrangler", "kv", "key", "put", key,
+        wrangler_bin, "kv", "key", "put", key,
         "--path", str(path),
         "--namespace-id", namespace_id,
         "--remote",
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=env)
         if r.returncode == 0:
             return True, ""
         err_msg = (r.stderr or r.stdout or "").strip()

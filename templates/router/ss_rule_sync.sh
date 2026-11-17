@@ -1,48 +1,105 @@
 #!/bin/sh
-# ===== Rules Hub 软路由规则订阅 - 一键安装 =====
-# 用法: wget -qO- __BASE__/router/install.sh | sh
-BASE="__BASE__/router"
-DIR="/koolshare/scripts"
+# ===== Rules Hub - fancyss 规则订阅同步 =====
+# 由 rules-hub 自动生成，请勿手工修改
+# 订阅源: __BASE__/router/fancyss
+BASE="__BASE__/router/fancyss"
+# 备用源（jsDelivr 读 gh-pages 分支），主源失败时自动回退；留空则关闭
+BASE_BAK="__BASE_BAK_SUB__"
 RULES="/koolshare/ss/rules"
-CRON_LINE="__CRON__"
-CRU="/usr/sbin/cru"
+TMP="/tmp/ruleshub_sync"
+LOG="/tmp/ruleshub_sync.log"
 
-echo "== Rules Hub 软路由规则订阅安装 =="
-[ -d "$RULES" ] || { echo "未检测到 fancyss ($RULES)，请先安装插件"; exit 1; }
-[ -d "$DIR" ] || DIR="/jffs/scripts"
-[ -d "$DIR" ] || { echo "未找到可写脚本目录"; exit 1; }
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; echo "$*"; }
 
-wget --no-check-certificate --timeout=30 -qO /tmp/ss_rule_sync.sh "$BASE/ss_rule_sync.sh" || { echo "下载同步脚本失败"; exit 1; }
-head -c 300 /tmp/ss_rule_sync.sh | grep -qi "<!doctype\|<html" && { echo "下载内容异常（HTML）"; rm -f /tmp/ss_rule_sync.sh; exit 1; }
-mv -f /tmp/ss_rule_sync.sh "$DIR/ss_rule_sync.sh"
-chmod +x "$DIR/ss_rule_sync.sh"
-echo "已安装: $DIR/ss_rule_sync.sh"
+[ -d "$RULES" ] || { echo "未检测到 fancyss 规则目录: $RULES"; exit 1; }
+mkdir -p "$TMP"
 
-for f in chnroute.txt gfwlist.conf cdn.txt version; do
-  if [ -f "$RULES/$f" ] && [ ! -f "$RULES/$f.orig" ]; then
-    cp -f "$RULES/$f" "$RULES/$f.orig"
+# fetch <相对路径> <输出文件>
+# 依次尝试 BASE / BASE_BAK，任一成功即返回 0。
+# 下载到 HTML（GitHub Pages 404 页 / 劫持页）视为失败，自动换下一个源。
+fetch() {
+  _rel="$1"; _out="$2"
+  for _b in "$BASE" "$BASE_BAK"; do
+    [ -n "$_b" ] || continue
+    wget --no-check-certificate --timeout=25 -qO "$_out" "$_b/$_rel" || continue
+    [ -s "$_out" ] || { rm -f "$_out"; continue; }
+    if head -c 300 "$_out" | grep -qi "<html\|<!doctype"; then
+      rm -f "$_out"
+      continue
+    fi
+    return 0
+  done
+  return 1
+}
+
+same() { [ "$(md5sum "$1" | awk '{print $1}')" = "$(md5sum "$2" | awk '{print $1}')" ]; }
+
+changed=0
+
+fetch version1 "$TMP/version1" || log "version1 下载失败（仅影响版本号显示）"
+
+apply() {
+  _name="$1"; _min="$2"; _max="$3"; _vline="$4"
+  if ! fetch "$_name" "$TMP/$_name"; then
+    log "$_name 下载失败，保留原文件"
+    return
   fi
-done
-echo "已备份原始规则为 *.orig"
+  _n=$(grep -c . "$TMP/$_name")
+  if [ "$_n" -lt "$_min" ]; then
+    log "$_name 条目过少($_n < $_min)，放弃覆盖"
+    return
+  fi
+  if [ "$_n" -gt "$_max" ]; then
+    log "$_name 条目异常偏多($_n > $_max)，放弃覆盖"
+    return
+  fi
+  if [ -f "$RULES/$_name" ] && same "$TMP/$_name" "$RULES/$_name"; then
+    log "$_name 已是最新 ($_n 条)"
+    return
+  fi
+  cp -f "$RULES/$_name" "$RULES/$_name.bak" 2>/dev/null
+  mv -f "$TMP/$_name" "$RULES/$_name"
+  log "$_name 已更新 ($_n 条)"
+  if [ -s "$TMP/version1" ]; then
+    _v=$(sed -n "${_vline}p" "$TMP/version1")
+    if [ -n "$_v" ] && [ -f "$RULES/version" ]; then
+      sed -i "${_vline}s|.*|$_v|" "$RULES/version"
+    fi
+  fi
+  changed=1
+}
 
-[ -x "$CRU" ] || CRU=$(which cru 2>/dev/null)
-if [ -n "$CRU" ] && [ -x "$CRU" ]; then
-  "$CRU" d ruleshub_sync 2>/dev/null
-  "$CRU" a ruleshub_sync "$CRON_LINE $DIR/ss_rule_sync.sh"
-  echo "已设置定时任务: 每周日 04:10 自动同步"
+apply chnroute.txt 1000 20000 2
+apply gfwlist.conf 500 40000 1
+__CDN_APPLY__
+
+rm -rf "$TMP"
+
+if [ "$changed" = "1" ]; then
+  log "规则已变更，重启 shadowsocks 生效..."
+  dbus set ss_basic_action=1 2>/dev/null
+  sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
+
+  # 健康检查：dnsmasq 起不来就回滚，避免规则文件拖垮整网 DNS
+  i=0
+  while [ "$i" -lt 10 ]; do
+    pidof dnsmasq >/dev/null 2>&1 && break
+    i=$((i + 1))
+    sleep 2
+  done
+  if ! pidof dnsmasq >/dev/null 2>&1; then
+    log "dnsmasq 未运行，回滚到上一版规则..."
+    for _f in chnroute.txt gfwlist.conf cdn.txt; do
+      if [ -f "$RULES/$_f.bak" ]; then
+        cp -f "$RULES/$_f.bak" "$RULES/$_f"
+      fi
+    done
+    sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
+    log "已回滚并重启，请检查 /tmp/ruleshub_sync.log"
+  else
+    log "重启完成，dnsmasq 正常"
+  fi
 else
-  echo "警告: 未找到 cru，请手动添加计划任务: $CRON_LINE $DIR/ss_rule_sync.sh"
+  log "无变更，跳过重启"
 fi
-
-START="/jffs/scripts/services-start"
-if [ -d /jffs/scripts ]; then
-  touch "$START"
-  chmod +x "$START"
-  if ! grep -q "ruleshub_sync" "$START"; then
-    echo "$CRU a ruleshub_sync \"$CRON_LINE $DIR/ss_rule_sync.sh\"" >> "$START"
-  fi
-  echo "已写入开机自启: $START"
-fi
-
-echo "== 立即执行一次同步 =="
-"$DIR/ss_rule_sync.sh"
+log "同步结束"

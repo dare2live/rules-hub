@@ -273,6 +273,47 @@ def build_report(sources, dead, conflicts, expected, stats, dups):
     return "\n".join(lines) + "\n"
 
 
+def check_red_lines(config):
+    """架构红线校验：
+    1) unbreak.txt 禁止出现长度 <= 4 的短 DOMAIN-KEYWORD（防 aws/epic 等子串误伤全网）；
+    2) Claude 策略组默认首选项必须锁定 Lightsail Singapore；
+    3) config.yaml 中每个业务策略组必须同时包含 Proxy 与 DIRECT；
+    4) config/surge.yaml 监听地址必须绑定 127.0.0.1（禁止 0.0.0.0 暴露局域网）。
+    """
+    violations = []
+    unbreak_path = BASE_DIR / "rules" / "unbreak.txt"
+    if unbreak_path.exists():
+        for ln, raw in enumerate(unbreak_path.read_text(encoding="utf-8").splitlines(), 1):
+            s = raw.strip()
+            if not s or s.startswith("#"):
+                continue
+            parts = [p.strip() for p in s.split(",")]
+            if len(parts) >= 2 and parts[0].upper() in ("DOMAIN-KEYWORD", "HOST-KEYWORD") and len(parts[1]) <= 4:
+                violations.append(("unbreak.txt:%d" % ln, "禁止短关键字 %s,%s" % (parts[0], parts[1])))
+
+    for p in config.get("policies", []):
+        name = p.get("name", "")
+        proxies = p.get("proxies") or []
+        if name == "Claude":
+            if not proxies or proxies[0] != "Lightsail Singapore" or p.get("qx_default") != "Lightsail Singapore":
+                violations.append(("config.yaml:Claude", "Claude 默认首选项必须锁定 Lightsail Singapore"))
+        if p.get("type") == "select":
+            if "DIRECT" not in proxies:
+                violations.append(("config.yaml:%s" % name, "策略组缺少 DIRECT 选项"))
+            if name != "Proxy" and "Proxy" not in proxies:
+                violations.append(("config.yaml:%s" % name, "策略组缺少 Proxy 选项"))
+
+    surge_cfg_path = BASE_DIR / "config" / "surge.yaml"
+    if surge_cfg_path.exists():
+        surge_cfg = yaml.safe_load(surge_cfg_path.read_text(encoding="utf-8")) or {}
+        for item in surge_cfg.get("general", []):
+            k = item.get("key", "")
+            v = str(item.get("value", ""))
+            if k in ("http-listen", "socks5-listen") and "0.0.0.0" in v:
+                violations.append(("config/surge.yaml:%s" % k, "禁止绑定 0.0.0.0 (%s)" % v))
+    return violations
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-write", action="store_true")
@@ -289,11 +330,13 @@ def main():
     dups = duplicates_within(sources)
     reject_leaks = check_reject_vs_direct(sources)
     mitm_violations = check_mitm_safety()
+    redline_violations = check_red_lines(config)
     report = build_report(sources, dead, conflicts, expected, stats, dups)
 
     print(f"规则源 {len(sources)} 个，规则 {sum(len(r) for _s, _t, r in sources)} 条，"
           f"被遮蔽 {len(dead)} 条（冲突 {len(conflicts)} / 预期 {len(expected)}），"
-          f"文件内重复 {len(dups)} 组，reject 刺穿 {len(reject_leaks)} 条，MITM 违规 {len(mitm_violations)} 条")
+          f"文件内重复 {len(dups)} 组，reject 刺穿 {len(reject_leaks)} 条，"
+          f"MITM 违规 {len(mitm_violations)} 条，红线违规 {len(redline_violations)} 条")
     if conflicts:
         print("\n策略冲突（前 12 条）：")
         for c in conflicts[:12]:
@@ -306,6 +349,10 @@ def main():
         print("\nMITM hostname 违规（前 12 条）：")
         for fn, h in mitm_violations[:12]:
             print(f"  {fn:<24} {h}")
+    if redline_violations:
+        print("\n架构红线违规：")
+        for loc, msg in redline_violations:
+            print(f"  {loc:<24} {msg}")
 
     if not args.no_write:
         if not DOCS_DIR.exists():
@@ -314,14 +361,14 @@ def main():
         out = DOCS_DIR / f"RULES_LINT_{stamp}.md"
         out.write_text(report, encoding="utf-8")
         print(f"\n报告已写入 {out.relative_to(BASE_DIR)}")
-    if args.strict and (conflicts or dups or reject_leaks or mitm_violations):
+    if args.strict and (conflicts or dups or reject_leaks or mitm_violations or redline_violations):
         print(
             f"STRICT FAIL · 策略冲突 {len(conflicts)} / 文件内重复 {len(dups)} / "
-            f"reject 刺穿 {len(reject_leaks)} / MITM 违规 {len(mitm_violations)}"
+            f"reject 刺穿 {len(reject_leaks)} / MITM 违规 {len(mitm_violations)} / 红线违规 {len(redline_violations)}"
         )
         return 1
     if args.strict:
-        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0 / reject 刺穿 0 / MITM 违规 0")
+        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0 / reject 刺穿 0 / MITM 违规 0 / 红线违规 0")
     return 0
 
 

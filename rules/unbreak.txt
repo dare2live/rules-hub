@@ -21,6 +21,12 @@ DOMAIN-SUFFIX,amap.com
 DOMAIN-SUFFIX,autonavi.com
 DOMAIN-SUFFIX,amap.cn
 
+# 公司域名邮箱（阿里企业邮 mxhichina.com，IMAP/SMTP 走 rdssolution.com 自有域名）
+# 邮件客户端若填 imap/smtp/pop.rdssolution.com，这些域名不在任何远程订阅里，
+# 会掉进 final → 兜底 → proxy(新加坡)，被阿里判定「异地登录」。
+# 内联最高优先级直连，订阅抖动也不受影响；刷配置后手机/ Surge / Clash / 小火箭 同时生效。
+DOMAIN-SUFFIX,rdssolution.com
+
 # 比亚迪 (BYD) 车联、车机与云服务（从 direct.txt 移来）
 # 这里的规则会被内联进 [filter_local]，优先级高于所有远程订阅；
 # BYD App 会轮换使用多个云端域名，且对出口 IP 地区敏感，
@@ -51,5 +57,3 @@ DOMAIN-SUFFIX,diplus.cn
 DOMAIN-KEYWORD,bydauto
 DOMAIN-KEYWORD,bydcloud
 DOMAIN-KEYWORD,bydservice
-# 兜底：任何含 byd 的域名一律直连（BYD App 动态域名较多）
-DOMAIN-KEYWORD,byd

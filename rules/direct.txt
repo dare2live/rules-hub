@@ -1,9 +1,5 @@
-# 微信 / 企业微信 / 腾讯系办公直连
-DOMAIN-SUFFIX,weixin.qq.com
+# 微信 / 企业微信 / 腾讯系办公直连（work.weixin.qq.com / weixin.qq.com / wechat.com 已置于最高优先级 unbreak.txt）
 DOMAIN-SUFFIX,qpic.cn
-DOMAIN-SUFFIX,wechat.com
-DOMAIN-SUFFIX,work.weixin.qq.com
-DOMAIN-SUFFIX,qyapi.weixin.qq.com
 DOMAIN-SUFFIX,mail.qq.com
 DOMAIN-SUFFIX,tencent.com
 DOMAIN-SUFFIX,qq.com
@@ -56,10 +52,11 @@ DOMAIN,apple-relay.fastly-edge.com
 DOMAIN-SUFFIX,msftncsi.com
 DOMAIN-SUFFIX,msftconnecttest.com
 
-# 电视端国内视频直连 (B站 TV、央视等)
+# 电视端国内视频直连 (B站 TV、央视、GoTV 鉴权等)
 DOMAIN-SUFFIX,bilibili.com
 DOMAIN-SUFFIX,bilibili.tv
 DOMAIN-SUFFIX,cctv.com
+DOMAIN-SUFFIX,d-net.tw
 
 # 常用服务白名单与防超时直连
 DOMAIN-SUFFIX,12306.cn
@@ -232,10 +229,6 @@ DOMAIN-SUFFIX,zuoyebang.com
 DOMAIN-SUFFIX,qichacha.com
 DOMAIN-SUFFIX,tianyancha.com
 
-# 高德地图（车机互联、账号、路线规划全走国内，绕境外会被判异地导致功能不可用）
-DOMAIN-SUFFIX,amap.com
-DOMAIN-SUFFIX,autonavi.com
-DOMAIN-SUFFIX,amap.cn
-
+# 高德地图（amap.com / autonavi.com / amap.cn 已置于 unbreak.txt 内联直连）
 # BYD / DiLink 已整体移到 rules/unbreak.txt：那里会被内联进 [filter_local]，
 # 优先级高于远程订阅，订阅拉取失败时依然直连。

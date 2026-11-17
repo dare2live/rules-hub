@@ -106,8 +106,8 @@ policies:
 
   - name: "Proxy"
     type: "select"
-    desc: "全球通用外网加速（X、GitHub、Google 搜索），新加坡优先"
-    qx_default: "Lightsail Singapore"
+    desc: "全球通用外网加速（X、GitHub、Google 搜索），跟随主 Proxy（新加坡优先）"
+    qx_default: "proxy"
     default_select: "Lightsail Singapore"
     proxies:
       - "Lightsail Singapore"
@@ -120,8 +120,8 @@ policies:
 
   - name: "Media"
     type: "select"
-    desc: "国际流媒体（YouTube、Netflix、Spotify），新加坡优先"
-    qx_default: "Lightsail Singapore"
+    desc: "国际流媒体（YouTube、Netflix、Spotify），跟随主 Proxy（新加坡优先）"
+    qx_default: "proxy"
     default_select: "Lightsail Singapore"
     proxies:
       - "Lightsail Singapore"
@@ -234,7 +234,7 @@ rule_sources:
   - id: "workbuddy"
     target: "WorkBuddy AI"
     file: "rules/workbuddy.txt"
-    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），默认直连"
+    desc: "WorkBuddy AI 海外版（.ai / .cc / .link），默认新加坡"
     # macOS 上两个客户端的可执行文件都叫 Electron，PROCESS-NAME 永远匹配不上，
     # 写进 Surge 就是死规则，所以限定只在 QX 侧输出（iOS 进程名是有效的）。
     # Mac 上两者靠域名区分：见 workbuddy_cn（.cn 直连）与本条（.ai，默认也直连）。
@@ -461,86 +461,7 @@ rewrites:
     enabled: true
     desc: "MissAV 网页去广告与右下角透明浮窗清理（本地维护 v5）"
 
-  # ======= 可选备用重写 (默认保持关闭) ======= #
-  # [已删除 2026-11] 彩云天气净化@ddgksf2013 —— 不用彩云天气，且它属于
-  # 墨鱼去开屏文件头明说「无法 MITM」的那批应用（彩云天气[会员]），规则本就无效。
-
-  - id: "netease_ads"
-    name: "网易云净化@ddgksf2013"
-    filename: "NeteaseAds.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/AdBlock/NeteaseAds.conf"
-    opt_parser: false
-    enabled: false
-    desc: "网易云音乐净化"
-
-  - id: "general_redirect"
-    name: "Google重定向@DivineEngine"
-    filename: "General.conf"
-    upstream_url: "https://raw.githubusercontent.com/ddgksf2013/Rewrite/master/Html/General.conf"
-    opt_parser: false
-    enabled: false
-    desc: "Google 地区重定向修复"
-
-  # [已删除 2026-11] 微信解锁被屏蔽的URL@zZPiglet —— 用不上，默认关闭的死条目。
-
-  # [已删除 2026-11] BoxJS商店版@chavyleung —— 没装 BoxJS，默认关闭的死条目。
-  # （BoxJS 是给「脚本型重写」用的 Web 配置台，本项目没有依赖它的脚本。）
-
-  - id: "kyxq"
-    name: "口语星球"
-    filename: "kyxq.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/kyxq.js"
-    opt_parser: true
-    enabled: false
-    desc: "口语星球 VIP 解锁"
-
-  - id: "namibox"
-    name: "纳米盒"
-    filename: "namibox.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/namibox.js"
-    opt_parser: true
-    enabled: false
-    desc: "纳米盒 VIP 解锁"
-
-  - id: "ximalaya_js"
-    name: "喜马拉雅"
-    filename: "ximalaya.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/ximalaya.js"
-    opt_parser: true
-    enabled: false
-    desc: "喜马拉雅 VIP 解锁"
-
-  - id: "qpy"
-    name: "趣配音"
-    filename: "qpy.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/qpy.js"
-    opt_parser: true
-    enabled: false
-    desc: "英语趣配音 VIP 解锁"
-
-  - id: "xintiao"
-    name: "有心跳"
-    filename: "xintiao.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/xintiao.js"
-    opt_parser: true
-    enabled: false
-    desc: "有心跳 VIP 解锁"
-
-  - id: "kuwo"
-    name: "酷我音乐"
-    filename: "kuwo.js"
-    upstream_url: "https://raw.githubusercontent.com/WeiGiegie/666/main/kuwo.js"
-    opt_parser: true
-    enabled: false
-    desc: "酷我音乐 VIP 解锁"
-
-  - id: "ft_chinese"
-    name: "FT Chinese"
-    filename: "cloudfront.js"
-    upstream_url: "https://raw.githubusercontent.com/chxm1023/Rewrite/main/cloudfront.js"
-    opt_parser: true
-    enabled: false
-    desc: "FT 中文网会员阅读"
+  # [已清理 2026-11-14] 9 条长期处于 enabled: false 的冗余重写（口语星球、纳米盒、趣配音、有心跳、酷我、喜马拉雅JS、网易云、FT中文网、Google重定向）已移除，保持编译产物与手机 QX 重写列表精简。
 
   - id: "youpume"
     name: "有谱么[本地维护]"

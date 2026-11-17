@@ -9,7 +9,6 @@ DOMAIN-SUFFIX,vungle.com
 DOMAIN-SUFFIX,appsflyer.com
 DOMAIN-SUFFIX,applovin.com
 DOMAIN-SUFFIX,umeng.com
-DOMAIN-SUFFIX,crashlytics.com
 DOMAIN-SUFFIX,adjust.com
 DOMAIN-SUFFIX,branch.io
 DOMAIN,log.byteoversea.com

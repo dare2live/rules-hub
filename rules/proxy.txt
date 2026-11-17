@@ -1,6 +1,10 @@
 # 通用海外常用站点（弥补老旧 GFWList 缺失的现代海外站点与 Stremio 详情页海报）
-DOMAIN,sharewithyou.dpdns.org
-DOMAIN,hd.rip
+DOMAIN-SUFFIX,sharewithyou.dpdns.org
+DOMAIN-SUFFIX,api-vstv.com
+IP-CIDR,38.96.208.0/24
+DOMAIN-SUFFIX,hd.rip
+DOMAIN-SUFFIX,highdefinition.rip
+DOMAIN-SUFFIX,mjv593.com
 DOMAIN-SUFFIX,fanart.tv
 DOMAIN-SUFFIX,media-amazon.com
 DOMAIN-SUFFIX,imdb.com

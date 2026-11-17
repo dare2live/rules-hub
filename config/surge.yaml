@@ -71,13 +71,13 @@ general:
     note: |
       UDP 不被策略支持时直接拒绝，避免半通不通的连接挂着。
   - key: http-listen
-    value: '0.0.0.0'
+    value: '127.0.0.1:6152'
     note: |
-      局域网共享代理入口，别的设备可以拿这台 Mac 当网关。
+      仅绑定本机回环地址，与 allow-wifi-access = false 保持一致，防止公共网络暴露代理端口。
   - key: socks5-listen
-    value: '0.0.0.0'
+    value: '127.0.0.1:6153'
     note: |
-      同上，SOCKS5 入口。
+      同上，SOCKS5 仅限本机访问。
 
 # 脱敏模板里的节点槽位。本机有 config/local.surge.yaml 时不会用到（走 #!include）。
 proxy_slots:
