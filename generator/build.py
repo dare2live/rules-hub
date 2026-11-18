@@ -1185,6 +1185,29 @@ def self_host_urls_in_block(block, base_url, tag):
 
 
 
+def apply_projectclash_script_patch(content, rw_id):
+    """ProjectClash 的模块脚本默认 10s 超时；波点脚本曾被同步超时隔离。
+
+    隔离按脚本 body 的 SHA256 记账，单纯「更新模块」但脚本字节不变是解不开的。
+    这里在构建期固定给波点脚本加 30s 超时，并往脚本尾部加一行注释改变 body 哈希，
+    让客户端把旧隔离条目当作不同脚本重新放行。幂等：已在缓存里改过不会重复加。
+    """
+    if rw_id != "bodian_music":
+        return content
+    marker = "rules-hub: 2026-11-18 re-arm body after ProjectClash script quarantine"
+    marker_line = f"// {marker} (10s default timeout -> 30s)\n"
+    if marker not in content:
+        content = content.rstrip("\n") + "\n" + marker_line
+    # QX / Clash 模块都识别 script 行上的 timeout=N 选项（秒）。
+    content = re.sub(
+        r"(url script-response-body https://raw\.githubusercontent\.com/WeiGiegie/666/main/bdyybata1\.js)"
+        r"(?!,\s*timeout=)",
+        r"\1, timeout=30",
+        content,
+    )
+    return content
+
+
 def build_rewrites(config):
     """Compile, mirror, and self-host Quantumult X rewrites."""
     rw_dist = QX_DIST / "rewrites"
@@ -1266,7 +1289,9 @@ def build_rewrites(config):
         if not content:
             print(f"   ⚠️  [Rewrites] {rw_id}: 无可用内容，跳过（不生成空文件）")
             continue
-            
+
+        content = apply_projectclash_script_patch(content, rw_id)
+
         # Clean / rewrite script references inside JS files to point to self-hosted URLs
         self_hosted_url = f"{base_url}/qx/rewrites/{fn}"
         if url:

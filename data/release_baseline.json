@@ -1,25 +1,25 @@
 {
-  "generated_at": "2026-11-10T19:47:53",
+  "generated_at": "2026-11-18T14:39:14",
   "resources": {
     "body/clash.yaml": {
       "count": 314,
       "kind": "config_body",
       "path": "Clash_Personal.yaml",
-      "sha256": "35a634ce386d9a369bdd30cd06d5e4590f10e13aa99af959aca410dc49685055",
+      "sha256": "df3fc99f402d853be7b935b3945dcea7f109e1bfa7f335c144b7d10565c7d993",
       "url": "workers.dev/<token>/clash.yaml"
     },
     "body/qx.conf": {
-      "count": 379,
+      "count": 387,
       "kind": "config_body",
       "path": "QuantumultX_Personal.conf",
-      "sha256": "716897dda1f5e27ad5efea3843ab3c38bcb12b01e3a4a71d6344cc2392a5200f",
+      "sha256": "fa7b615205ecc8042fafb183b9cbb201c5b79120a8d80ca003ddcafcbcfad5c9",
       "url": "workers.dev/<token>/qx.conf"
     },
     "kv/module.conf": {
       "count": 664,
       "kind": "kv_module",
       "path": "dist/clash/module.conf",
-      "sha256": "be455b8c064869e7a47b3dc643b3c5b33617b2b8a6ac9f03b77efa02010dfb63",
+      "sha256": "b009f2e2c21c4b4a0fd557b65ba783f92ebcf505a6040c75e61360187247ef30",
       "url": "workers.dev/<token>/module.conf"
     },
     "qx/adblock_cn.list": {
@@ -44,10 +44,10 @@
       "url": "https://dare2live.github.io/rules-hub/qx/claude.list"
     },
     "qx/custom_direct.list": {
-      "count": 182,
+      "count": 178,
       "kind": "qx_ruleset",
       "path": "dist/qx/custom_direct.list",
-      "sha256": "5b30f9dd66c4b50cd46dbb24970c043207ea77a5d7cdf8ac665cafdb29dadd1b",
+      "sha256": "bc0681ca6c6e4fa78bb50bd816bd64235d2ffb91eb67e768a2e1a0471042b525",
       "url": "https://dare2live.github.io/rules-hub/qx/custom_direct.list"
     },
     "qx/geoip_cn.list": {
@@ -79,10 +79,10 @@
       "url": "https://dare2live.github.io/rules-hub/qx/openai.list"
     },
     "qx/proxy.list": {
-      "count": 4418,
+      "count": 4427,
       "kind": "qx_ruleset",
       "path": "dist/qx/proxy.list",
-      "sha256": "318ad14e0a7f60856eb35378d31317e8fec7fb042e7e328448db3e992f855572",
+      "sha256": "e9ef1b30d029a799725ef9061120f92ab55990451766c18b56dc6477d17eed76",
       "url": "https://dare2live.github.io/rules-hub/qx/proxy.list"
     },
     "qx/reject.list": {
@@ -124,7 +124,7 @@
       "count": 43,
       "kind": "qx_rewrite",
       "path": "dist/qx/rewrites/XiaoHongShuAds.conf",
-      "sha256": "1ca8e7f396feb83f82aa1b61c59ff9902679ebf90350404d62a327140ac171ab",
+      "sha256": "d8477c096863b67dc61862fbc03c24c37f1c7c141019761dbfe3d1054aa269d7",
       "url": "https://dare2live.github.io/rules-hub/qx/rewrites/XiaoHongShuAds.conf"
     },
     "qx/rewrites/Ximalaya.conf": {
@@ -138,7 +138,7 @@
       "count": 26,
       "kind": "qx_rewrite",
       "path": "dist/qx/rewrites/XueQiuAds.conf",
-      "sha256": "f9127c7b6e037b4698349402187a897e605c922d8959c9586c6fa38f199e71cf",
+      "sha256": "e5aac74149b4f6a5a4a0730df962ac147908900e492f9f005f13f6940246cd0f",
       "url": "https://dare2live.github.io/rules-hub/qx/rewrites/XueQiuAds.conf"
     },
     "qx/rewrites/YoutubeAds.conf": {
@@ -156,10 +156,10 @@
       "url": "https://dare2live.github.io/rules-hub/qx/rewrites/amap.trim.v6.js"
     },
     "qx/rewrites/bdyybata1.js": {
-      "count": 21,
+      "count": 22,
       "kind": "qx_rewrite",
       "path": "dist/qx/rewrites/bdyybata1.js",
-      "sha256": "768574a1050a7264a9982d6cceb395a734ced8ebe24bad8a5a8bdd78d086091e",
+      "sha256": "5766710e26c9bc9fe256530b1bdb49e45d38c3d6d6442fbde0f80ff89d61f76e",
       "url": "https://dare2live.github.io/rules-hub/qx/rewrites/bdyybata1.js"
     },
     "qx/rewrites/bloomberg.js": {
@@ -219,17 +219,17 @@
       "url": "https://dare2live.github.io/rules-hub/qx/tiktok.list"
     },
     "qx/unbreak.list": {
-      "count": 45,
+      "count": 52,
       "kind": "qx_ruleset",
       "path": "dist/qx/unbreak.list",
-      "sha256": "988a7ff181434465b32d3de9b96e4e747813762420b7db1618679a61d6f80415",
+      "sha256": "ae930de3e513b4821f456b6df8d730cd070f455a5345f9f4a3516a157cf2af86",
       "url": "https://dare2live.github.io/rules-hub/qx/unbreak.list"
     },
     "qx/workbuddy.list": {
       "count": 10,
       "kind": "qx_ruleset",
       "path": "dist/qx/workbuddy.list",
-      "sha256": "c59fa7dd25284ac9d1daf00f9e61b31c42c92e8d6cb88442c9d33317f32eb997",
+      "sha256": "27c78da8406a71c5b6d0384a33bafe52786d86a1f74caefee0867260b9e244de",
       "url": "https://dare2live.github.io/rules-hub/qx/workbuddy.list"
     },
     "qx/workbuddy_cn.list": {
