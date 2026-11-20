@@ -29,6 +29,7 @@
 """
 
 import argparse
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -173,7 +174,6 @@ def check_reject_vs_direct(sources):
 
 def check_mitm_safety():
     """检查主配置与所有镜像重写文件内的 [mitm] hostname 是否混入禁用整域通配（如 *.qq.com）或高危后缀。"""
-    import re
     mitm_cfg = yaml.safe_load((BASE_DIR / "config" / "mitm.yaml").read_text(encoding="utf-8")) or {}
     deny_exact = {x.lower() for x in mitm_cfg.get("deny_exact", [])}
     deny_suffix = tuple(x.lower() for x in mitm_cfg.get("deny_suffix", []))
@@ -197,6 +197,28 @@ def check_mitm_safety():
                 h = raw_h.strip()
                 if h and not _allowed(h):
                     violations.append((p.name, h))
+    return violations
+
+
+def check_qx_rewrite_syntax():
+    """检查 dist/qx/rewrites 下的 QX 重写规则是否误带行尾逗号选项（如 `, timeout=30`）。
+
+    QX 不支持在 script URL 末尾追加选项，会把逗号吞进 URL 导致远程拉取 404；
+    Clash 专属参数（如 timeout=30）只能落在 dist/clash/module.conf。
+    """
+    violations = []
+    rw_dir = QX_DIST / "rewrites"
+    targets = sorted(rw_dir.glob("*.conf")) + sorted(rw_dir.glob("*.js"))
+    bad_pat = re.compile(r"(?:^|\s)(?:url|url-and-header)\s+script-[a-z-]+\s+https?://\S+,")
+    for p in targets:
+        if not p.exists():
+            continue
+        for lineno, line in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            s = line.strip()
+            if not s or s.startswith(("#", ";", "//")):
+                continue
+            if bad_pat.search(line):
+                violations.append((p.name, lineno, s))
     return violations
 
 
@@ -330,13 +352,15 @@ def main():
     dups = duplicates_within(sources)
     reject_leaks = check_reject_vs_direct(sources)
     mitm_violations = check_mitm_safety()
+    qx_rewrite_violations = check_qx_rewrite_syntax()
     redline_violations = check_red_lines(config)
     report = build_report(sources, dead, conflicts, expected, stats, dups)
 
     print(f"规则源 {len(sources)} 个，规则 {sum(len(r) for _s, _t, r in sources)} 条，"
           f"被遮蔽 {len(dead)} 条（冲突 {len(conflicts)} / 预期 {len(expected)}），"
           f"文件内重复 {len(dups)} 组，reject 刺穿 {len(reject_leaks)} 条，"
-          f"MITM 违规 {len(mitm_violations)} 条，红线违规 {len(redline_violations)} 条")
+          f"MITM 违规 {len(mitm_violations)} 条，QX 重写语法违规 {len(qx_rewrite_violations)} 条，"
+          f"红线违规 {len(redline_violations)} 条")
     if conflicts:
         print("\n策略冲突（前 12 条）：")
         for c in conflicts[:12]:
@@ -349,6 +373,10 @@ def main():
         print("\nMITM hostname 违规（前 12 条）：")
         for fn, h in mitm_violations[:12]:
             print(f"  {fn:<24} {h}")
+    if qx_rewrite_violations:
+        print("\nQX 重写语法违规（前 12 条）：")
+        for fn, lineno, line_txt in qx_rewrite_violations[:12]:
+            print(f"  {fn}:{lineno:<6} {line_txt[:100]}")
     if redline_violations:
         print("\n架构红线违规：")
         for loc, msg in redline_violations:
@@ -361,14 +389,18 @@ def main():
         out = DOCS_DIR / f"RULES_LINT_{stamp}.md"
         out.write_text(report, encoding="utf-8")
         print(f"\n报告已写入 {out.relative_to(BASE_DIR)}")
-    if args.strict and (conflicts or dups or reject_leaks or mitm_violations or redline_violations):
+    if args.strict and (conflicts or dups or reject_leaks or mitm_violations or qx_rewrite_violations or redline_violations):
         print(
             f"STRICT FAIL · 策略冲突 {len(conflicts)} / 文件内重复 {len(dups)} / "
-            f"reject 刺穿 {len(reject_leaks)} / MITM 违规 {len(mitm_violations)} / 红线违规 {len(redline_violations)}"
+            f"reject 刺穿 {len(reject_leaks)} / MITM 违规 {len(mitm_violations)} / "
+            f"QX 重写语法违规 {len(qx_rewrite_violations)} / 红线违规 {len(redline_violations)}"
         )
         return 1
     if args.strict:
-        print(f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0 / reject 刺穿 0 / MITM 违规 0 / 红线违规 0")
+        print(
+            f"STRICT PASS · 冲突 0 / 预期遮蔽 {len(expected)} / 重复 0 / "
+            f"reject 刺穿 0 / MITM 违规 0 / QX 重写语法违规 0 / 红线违规 0"
+        )
     return 0
 
 

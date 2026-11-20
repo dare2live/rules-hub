@@ -1,18 +1,18 @@
 {
-  "generated_at": "2026-11-18T14:39:14",
+  "generated_at": "2026-11-20T16:32:21",
   "resources": {
     "body/clash.yaml": {
-      "count": 314,
+      "count": 393,
       "kind": "config_body",
       "path": "Clash_Personal.yaml",
-      "sha256": "df3fc99f402d853be7b935b3945dcea7f109e1bfa7f335c144b7d10565c7d993",
+      "sha256": "c33714cc69123c63493a9edee1336d52f6b420377f201bdf5e330be69689ab1f",
       "url": "workers.dev/<token>/clash.yaml"
     },
     "body/qx.conf": {
       "count": 387,
       "kind": "config_body",
       "path": "QuantumultX_Personal.conf",
-      "sha256": "fa7b615205ecc8042fafb183b9cbb201c5b79120a8d80ca003ddcafcbcfad5c9",
+      "sha256": "3ce47b576b407808e6b5602a35bea919a514509a64682236a783df7155ab9427",
       "url": "workers.dev/<token>/qx.conf"
     },
     "kv/module.conf": {
@@ -159,7 +159,7 @@
       "count": 22,
       "kind": "qx_rewrite",
       "path": "dist/qx/rewrites/bdyybata1.js",
-      "sha256": "5766710e26c9bc9fe256530b1bdb49e45d38c3d6d6442fbde0f80ff89d61f76e",
+      "sha256": "07ad888846c1aaa9802a6f44aca47bf29c63f4c799775489e66ff0efc6771282",
       "url": "https://dare2live.github.io/rules-hub/qx/rewrites/bdyybata1.js"
     },
     "qx/rewrites/bloomberg.js": {

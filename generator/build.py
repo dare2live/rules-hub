@@ -1189,8 +1189,12 @@ def apply_projectclash_script_patch(content, rw_id):
     """ProjectClash 的模块脚本默认 10s 超时；波点脚本曾被同步超时隔离。
 
     隔离按脚本 body 的 SHA256 记账，单纯「更新模块」但脚本字节不变是解不开的。
-    这里在构建期固定给波点脚本加 30s 超时，并往脚本尾部加一行注释改变 body 哈希，
-    让客户端把旧隔离条目当作不同脚本重新放行。幂等：已在缓存里改过不会重复加。
+    这里往波点脚本尾部加一行注释改变 body 哈希，让客户端把旧隔离条目当作不同脚本
+    重新放行（幂等：已加过不会重复加）。
+
+    注意：绝不能往 QX 重写文件（bdyybata1.js / all.conf）里写 `, timeout=30` ——
+    QX 的 [rewrite_local] 不识别脚本行尾参数，会把末尾逗号拼进脚本 URL 导致 404；
+    `timeout=30` 仅在生成 dist/clash/module.conf 时追加。
     """
     if rw_id != "bodian_music":
         return content
@@ -1198,14 +1202,22 @@ def apply_projectclash_script_patch(content, rw_id):
     marker_line = f"// {marker} (10s default timeout -> 30s)\n"
     if marker not in content:
         content = content.rstrip("\n") + "\n" + marker_line
-    # QX / Clash 模块都识别 script 行上的 timeout=N 选项（秒）。
-    content = re.sub(
-        r"(url script-response-body https://raw\.githubusercontent\.com/WeiGiegie/666/main/bdyybata1\.js)"
-        r"(?!,\s*timeout=)",
-        r"\1, timeout=30",
-        content,
-    )
     return content
+
+
+def apply_projectclash_module_timeout(module_text, base_url):
+    """仅在 ProjectClash 模块（dist/clash/module.conf）为波点脚本追加 timeout=30。
+
+    Quantumult X 的 [rewrite_local] 不支持 script 行尾 `, timeout=N` 参数，
+    会把逗号拼进脚本 URL 导致 404；而 ProjectClash 的 ModuleQuantumultXParser
+    支持 `timeout=30`（覆盖默认 10s 超时防止再次隔离）。
+    """
+    target = re.escape(f"url script-response-body {base_url}/qx/rewrites/bdyybata1.js")
+    return re.sub(
+        rf"({target})(?!,\s*timeout=)",
+        r"\1, timeout=30",
+        module_text,
+    )
 
 
 def build_rewrites(config):
@@ -1500,7 +1512,7 @@ def build_rewrites(config):
         f.write(aio_text)
     CLASH_DIST.mkdir(parents=True, exist_ok=True)
     with open(CLASH_DIST / "module.conf", "w", encoding="utf-8") as f:
-        f.write(aio_text)
+        f.write(apply_projectclash_module_timeout(aio_text, base_url))
     return produced
 
 
@@ -1966,47 +1978,132 @@ def clash_yaml_scalar(text):
     return "'" + str(text).replace("'", "''") + "'"
 
 
-def build_clash(config, rule_data):
-    """生成 Clash（mihomo）的远程规则集与配置模板。
+def _clash_core_header_lines():
+    """Return shared top-level, DNS, TUN, and Sniffer YAML lines for Clash (macOS 1.0.16+)."""
+    lines = []
+    lines.append("mixed-port: 7890")
+    lines.append("allow-lan: false")
+    lines.append("bind-address: 127.0.0.1")
+    lines.append("mode: rule")
+    lines.append("log-level: warning")
+    lines.append("ipv6: false")
+    lines.append("unified-delay: true")
+    lines.append("tcp-concurrent: true")
+    lines.append("find-process-mode: strict")
+    # 手机热点 CGNAT 空闲回收激进，15s TCP 保活可避免切网或短暂停顿后长连接僵死
+    lines.append("keep-alive-idle: 15")
+    lines.append("keep-alive-interval: 15")
+    # 无 GEOSITE 规则，使用轻量 geoip.metadb + memconservative 降低 8 GB 内存占用
+    lines.append("geodata-mode: false")
+    lines.append("geodata-loader: memconservative")
+    lines.append("")
+    lines.append("profile:")
+    lines.append("  store-selected: true")
+    lines.append("  store-fake-ip: true")
+    lines.append("")
 
-    和 QX / Surge 共用同一批规则源，只是换个输出格式，保证三端分流一致。
+    # DNS：和 Surge / QX 保持同一套思路 —— 只用国内 DoH，境外域名交给节点远端解析。
+    # 一旦在 nameserver 里放了境外明文 DNS，等于把每个查询都交给运营商和投毒者。
+    lines.append("dns:")
+    lines.append("  enable: true")
+    lines.append("  ipv6: false")
+    lines.append("  use-hosts: true")
+    lines.append("  use-system-hosts: true")
+    lines.append("  cache-algorithm: arc")
+    lines.append("  cache-max-size: 2048")
+    # 不写 listen：iOS 沙箱里绑 0.0.0.0:1053 会失败，
+    # 而 TUN 的 dns-hijack 已经把 53 收进来了，本来也不需要独立监听端口。
+    lines.append("  enhanced-mode: fake-ip")
+    lines.append("  fake-ip-range: 198.18.0.1/16")
+    lines.append("  fake-ip-filter:")
+    for item in (
+        "'*.lan'",
+        "'*.local'",
+        "'localhost'",
+        "'localhost.ptlogin2.qq.com'",
+        "'captive.apple.com'",
+        "'+.push.apple.com'",
+        "'cctv.lifehackers.cc'",
+        "'+.msftconnecttest.com'",
+        "'+.msftncsi.com'",
+        "'time.*.com'",
+        "'stun.*.*'",
+        "'+.stun.*.*'",
+        "'+.stun.*.*.*'",
+        "'+.turn.*.*'",
+        "'+.srv.nintendo.net'",
+        "'+.stun.playstation.net'",
+        "'xbox.*.microsoft.com'",
+        "'+.10099.com.cn'",
+        "'+.cmpassport.com'",
+        "'+.jegotrip.com.cn'",
+        "'+.icitymobile.mobi'",
+        "'id6.me'",
+        "'+.pingan.com.cn'",
+    ):
+        lines.append(f"    - {item}")
+    lines.append("  default-nameserver:")
+    lines.append("    - 223.5.5.5")
+    lines.append("    - 119.29.29.29")
+    # 全部走国内 DoH。境外域名不在这里解析：
+    # 域名会原样交给节点，由节点侧解析，本地不产生任何境外查询。
+    lines.append("  nameserver:")
+    lines.append("    - https://dns.alidns.com/dns-query")
+    lines.append("    - https://doh.pub/dns-query")
+    lines.append("  proxy-server-nameserver:")
+    lines.append("    - https://dns.alidns.com/dns-query")
+    lines.append("    - https://doh.pub/dns-query")
+    lines.append("")
 
-    产物分两类：
-      dist/clash/rules/*.yaml   公开的 rule-provider，客户端按 interval 自动更新
-      dist/clash/config.example.yaml  模板（占位节点，供别人参考）
+    # Clash Apple 1.0.16+ 由客户端统一管理协议栈与 dns-hijack，只需保留 BBR 与私网路由排除
+    lines.append("tun:")
+    lines.append("  congestion-controller: bbr")
+    lines.append("  route-exclude-address:")
+    for cidr in (
+        "10.0.0.0/8",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+    ):
+        lines.append(f"    - {cidr}")
+    lines.append("")
 
-    真实节点不进仓库：个人配置由 generate_personal_clash_config() 在本地生成。
-    """
-    if CLASH_RULES_DIST.exists():
-        import shutil
-        shutil.rmtree(CLASH_RULES_DIST)
-    CLASH_RULES_DIST.mkdir(parents=True, exist_ok=True)
+    # 嗅探：不少规则与模块 MITM 靠域名匹配，但有些 App 流量进来时只有 IP 或复用已有 DNS 映射连接。
+    # 必须保持 enable: true、force-dns-mapping: true、parse-pure-ip: true、override-destination: false，
+    # 否则 Clash 1.0.14+ 模块引擎会判定嗅探存在缺口。
+    lines.append("sniffer:")
+    lines.append("  enable: true")
+    lines.append("  force-dns-mapping: true")
+    lines.append("  parse-pure-ip: true")
+    lines.append("  override-destination: false")
+    lines.append("  sniff:")
+    lines.append("    HTTP:")
+    lines.append("      ports: [80, 8080-8880]")
+    lines.append("    TLS:")
+    lines.append("      ports: [443, 8443]")
+    lines.append("    QUIC:")
+    lines.append("      ports: [443, 8443]")
+    lines.append("  skip-domain:")
+    lines.append("    - '+.lan'")
+    lines.append("    - '+.local'")
+    lines.append("    - 'cctv.lifehackers.cc'")
+    lines.append("  skip-dst-address:")
+    for cidr in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+    ):
+        lines.append(f"    - {cidr}")
+    lines.append("")
+    return lines
+
+
+def _render_clash_example_yaml(config, provider_ids):
+    """Render and write dist/clash/config.example.yaml from config and built rule-providers."""
     base_url = config["meta"]["base_url"]
-
-    # 1. rule-provider 文件
-    provider_ids = []
-    for r in config.get("rule_sources", []):
-        rule_id = r["id"]
-        if "file" not in r:
-            continue
-        payload = []
-        for line in rule_data.get(r["file"], []):
-            conv = surge_rule_to_clash(line)
-            if conv:
-                payload.append(conv)
-        if not payload:
-            continue
-        body = [
-            f"# {r.get('desc', rule_id)}",
-            "# 由 rules-hub 自动生成，勿手改。",
-            "# 同源规则：Surge / Quantumult X / Clash 三端内容一致。",
-            "payload:",
-        ]
-        body += [f"  - {clash_yaml_scalar(x)}" for x in payload]
-        write_text(CLASH_RULES_DIST / f"{rule_id}.yaml", "\n".join(body) + "\n")
-        provider_ids.append((rule_id, r.get("target"), len(payload)))
-
-    # 2. 主配置模板
     policies = [p for p in config.get("policies", []) if p.get("type") == "select"]
     fb_groups = config.get("fallback_groups", [])
 
@@ -2020,88 +2117,7 @@ def build_clash(config, rule_data):
     L.append("#   2) 用 proxy-providers: 挂自己的订阅链接，节点自动更新")
     L.append("# 想省事就直接用本地生成的 Clash_Personal.yaml（已含节点，不进仓库）。")
     L.append("")
-
-    L.append("mixed-port: 7890")
-    L.append("allow-lan: false")
-    L.append("bind-address: '*'")
-    L.append("mode: rule")
-    L.append("log-level: warning")
-    L.append("ipv6: false")
-    L.append("unified-delay: true")
-    L.append("tcp-concurrent: true")
-    L.append("find-process-mode: strict")
-    L.append("global-client-fingerprint: chrome")
-    L.append("")
-    L.append("profile:")
-    L.append("  store-selected: true")
-    L.append("  store-fake-ip: true")
-    L.append("")
-
-    # DNS：和 Surge / QX 保持同一套思路 —— 只用国内解析器，境外域名交给节点远端解析。
-    # 一旦在 nameserver 里放了境外明文 DNS，等于把每个查询都交给运营商和投毒者。
-    L.append("dns:")
-    L.append("  enable: true")
-    L.append("  ipv6: false")
-    # 不写 listen：iOS 沙箱里绑 0.0.0.0:1053 会失败，
-    # 而 TUN 的 dns-hijack 已经把 53 收进来了，本来也不需要独立监听端口。
-    L.append("  enhanced-mode: fake-ip")
-    L.append("  fake-ip-range: 198.18.0.1/16")
-    L.append("  fake-ip-filter:")
-    for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
-                 "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
-                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'",
-                 "'+.10099.com.cn'", "'+.cmpassport.com'", "'+.jegotrip.com.cn'",
-                 "'+.icitymobile.mobi'", "'id6.me'", "'+.pingan.com.cn'"):
-        L.append(f"    - {item}")
-    L.append("  default-nameserver:")
-    L.append("    - 223.5.5.5")
-    L.append("    - 119.29.29.29")
-    L.append("  # 全部走国内 DoH。境外域名不在这里解析：")
-    L.append("  # 域名会原样交给节点，由节点侧解析，本地不产生任何境外查询。")
-    L.append("  nameserver:")
-    L.append("    - https://dns.alidns.com/dns-query")
-    L.append("    - https://doh.pub/dns-query")
-    L.append("  proxy-server-nameserver:")
-    L.append("    - https://dns.alidns.com/dns-query")
-    L.append("  nameserver-policy:")
-    L.append("    'geosite:cn,private':")
-    L.append("      - https://dns.alidns.com/dns-query")
-    L.append("      - https://doh.pub/dns-query")
-    L.append("")
-
-    L.append("tun:")
-    L.append("  enable: true")
-    L.append("  stack: mixed")
-    L.append("  dns-hijack:")
-    L.append("    - any:53")
-    L.append("  auto-route: true")
-    L.append("  auto-detect-interface: true")
-    L.append("")
-
-    # 嗅探：不少规则与模块 MITM 靠域名匹配，但有些 App 流量进来时只有 IP 或复用已有 DNS 映射连接。
-    # 必须保持 enable: true、force-dns-mapping: true、parse-pure-ip: true、override-destination: false，
-    # 否则 Clash 1.0.14 模块引擎会判定嗅探存在缺口（提示“当前配置关掉了模块需要的一项设置，部分 App 里模块可能不生效”）。
-    L.append("sniffer:")
-    L.append("  enable: true")
-    L.append("  force-dns-mapping: true")
-    L.append("  parse-pure-ip: true")
-    L.append("  override-destination: false")
-    L.append("  sniff:")
-    L.append("    HTTP:")
-    L.append("      ports: [80, 8080-8880]")
-    L.append("    TLS:")
-    L.append("      ports: [443, 8443]")
-    L.append("    QUIC:")
-    L.append("      ports: [443, 8443]")
-    L.append("")
-
-    L.append("geodata-mode: true")
-    L.append("geo-auto-update: true")
-    L.append("geox-url:")
-    L.append("  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat")
-    L.append("  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat")
-    L.append("  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb")
-    L.append("")
+    L.extend(_clash_core_header_lines())
 
     # 占位节点：必须真实存在，否则 proxy-groups 引用会校验失败
     L.append("# 占位节点：换成自己的，或改用下面的 proxy-providers")
@@ -2120,7 +2136,7 @@ def build_clash(config, rule_data):
     L.append("# 有订阅链接的话，用这个替代上面的 proxies（节点会自动更新）")
     L.append("# proxy-providers:")
     L.append("#   my-sub:")
-    L.append(f"#     type: http")
+    L.append("#     type: http")
     L.append("#     url: 'https://example.com/sub?token=xxx'")
     L.append("#     interval: 86400")
     L.append("#     path: ./providers/my-sub.yaml")
@@ -2190,7 +2206,7 @@ def build_clash(config, rule_data):
             continue
         for proc in r.get("process", []):
             L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
-    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
+    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 走默认新加坡代理出口，见 config 规则组）
 
     L.append("  # ===== 3. 规则集（远程托管，每日自动更新）=====")
     for r in config["rule_sources"]:
@@ -2205,6 +2221,49 @@ def build_clash(config, rule_data):
     L.append("")
 
     write_text(CLASH_DIST / "config.example.yaml", "\n".join(L) + "\n")
+
+
+def build_clash(config, rule_data):
+    """生成 Clash（mihomo）的远程规则集与配置模板。
+
+    和 QX / Surge 共用同一批规则源，只是换个输出格式，保证三端分流一致。
+
+    产物分两类：
+      dist/clash/rules/*.yaml   公开的 rule-provider，客户端按 interval 自动更新
+      dist/clash/config.example.yaml  模板（占位节点，供别人参考）
+
+    真实节点不进仓库：个人配置由 generate_personal_clash_config() 在本地生成。
+    """
+    if CLASH_RULES_DIST.exists():
+        import shutil
+        shutil.rmtree(CLASH_RULES_DIST)
+    CLASH_RULES_DIST.mkdir(parents=True, exist_ok=True)
+
+    # 1. rule-provider 文件
+    provider_ids = []
+    for r in config.get("rule_sources", []):
+        rule_id = r["id"]
+        if "file" not in r:
+            continue
+        payload = []
+        for line in rule_data.get(r["file"], []):
+            conv = surge_rule_to_clash(line)
+            if conv:
+                payload.append(conv)
+        if not payload:
+            continue
+        body = [
+            f"# {r.get('desc', rule_id)}",
+            "# 由 rules-hub 自动生成，勿手改。",
+            "# 同源规则：Surge / Quantumult X / Clash 三端内容一致。",
+            "payload:",
+        ]
+        body += [f"  - {clash_yaml_scalar(x)}" for x in payload]
+        write_text(CLASH_RULES_DIST / f"{rule_id}.yaml", "\n".join(body) + "\n")
+        provider_ids.append((rule_id, r.get("target"), len(payload)))
+
+    # 2. 主配置模板
+    _render_clash_example_yaml(config, provider_ids)
     total = sum(n for _i, _t, n in provider_ids)
     print(f"   -> [Clash] {len(provider_ids)} 个 rule-provider / {total} 条规则 / 模板已生成")
     return provider_ids
@@ -2316,69 +2375,7 @@ def generate_personal_clash_config(config, rule_data):
     L.append(f"# 规则远程托管: {base_url}/clash/rules/  （每日自动更新，无需重导）")
     L.append("# 节点改了才需要重新生成；规则变了客户端会自己拉。")
     L.append("")
-    L.append("mixed-port: 7890")
-    L.append("allow-lan: false")
-    L.append("mode: rule")
-    L.append("log-level: warning")
-    L.append("ipv6: false")
-    L.append("unified-delay: true")
-    L.append("tcp-concurrent: true")
-    L.append("find-process-mode: strict")
-    L.append("global-client-fingerprint: chrome")
-    L.append("")
-    L.append("profile:")
-    L.append("  store-selected: true")
-    L.append("  store-fake-ip: true")
-    L.append("")
-    L.append("dns:")
-    L.append("  enable: true")
-    L.append("  ipv6: false")
-    L.append("  enhanced-mode: fake-ip")
-    L.append("  fake-ip-range: 198.18.0.1/16")
-    L.append("  fake-ip-filter:")
-    for item in ("'*.lan'", "'*.local'", "'+.msftconnecttest.com'", "'+.msftncsi.com'",
-                 "'time.*.com'", "'stun.*.*'", "'+.srv.nintendo.net'",
-                 "'+.stun.playstation.net'", "'xbox.*.microsoft.com'",
-                 "'+.10099.com.cn'", "'+.cmpassport.com'", "'+.jegotrip.com.cn'",
-                 "'+.icitymobile.mobi'", "'id6.me'", "'+.pingan.com.cn'"):
-        L.append(f"    - {item}")
-    L.append("  default-nameserver:")
-    L.append("    - 223.5.5.5")
-    L.append("    - 119.29.29.29")
-    L.append("  nameserver:")
-    L.append("    - https://dns.alidns.com/dns-query")
-    L.append("    - https://doh.pub/dns-query")
-    L.append("  proxy-server-nameserver:")
-    L.append("    - https://dns.alidns.com/dns-query")
-    L.append("  nameserver-policy:")
-    L.append("    'geosite:cn,private':")
-    L.append("      - https://dns.alidns.com/dns-query")
-    L.append("      - https://doh.pub/dns-query")
-    L.append("")
-    L.append("tun:")
-    L.append("  enable: true")
-    L.append("  stack: mixed")
-    L.append("  dns-hijack:")
-    L.append("    - any:53")
-    L.append("  auto-route: true")
-    L.append("  auto-detect-interface: true")
-    L.append("")
-    L.append("sniffer:")
-    L.append("  enable: true")
-    L.append("  force-dns-mapping: true")
-    L.append("  parse-pure-ip: true")
-    L.append("  override-destination: false")
-    L.append("  sniff:")
-    L.append("    HTTP:")
-    L.append("      ports: [80, 8080-8880]")
-    L.append("    TLS:")
-    L.append("      ports: [443, 8443]")
-    L.append("    QUIC:")
-    L.append("      ports: [443, 8443]")
-    L.append("")
-    L.append("geodata-mode: true")
-    L.append("geo-auto-update: true")
-    L.append("")
+    L.extend(_clash_core_header_lines())
     L.append("proxies:")
     for n in nodes:
         L.append(f"  - name: {clash_yaml_scalar(n['name'])}")
@@ -2396,12 +2393,55 @@ def generate_personal_clash_config(config, rule_data):
             L.append("    skip-cert-verify: true")
     L.append("")
 
+    priv_path = BASE_DIR / ".private" / "clash_providers.yaml"
+    priv_clash = _load_yaml(priv_path) if priv_path.exists() else {}
+    proxy_providers = priv_clash.get("proxy_providers", {}) or {}
+    provider_groups = priv_clash.get("provider_groups", []) or []
+    inject_into_policies = priv_clash.get("inject_into_policies", {}) or {}
+    direct_domains = priv_clash.get("direct_domains", []) or []
+
+    if proxy_providers:
+        L.append("proxy-providers:")
+        for pname, pcfg in proxy_providers.items():
+            L.append(f"  {pname}:")
+            if pcfg.get("type"):
+                L.append(f"    type: {pcfg['type']}")
+            if pcfg.get("url"):
+                L.append(f"    url: {clash_yaml_scalar(pcfg['url'])}")
+            if "interval" in pcfg:
+                L.append(f"    interval: {pcfg['interval']}")
+            if pcfg.get("header"):
+                L.append("    header:")
+                for hkey, hvals in pcfg["header"].items():
+                    L.append(f"      {hkey}:")
+                    for hv in (hvals if isinstance(hvals, list) else [hvals]):
+                        L.append(f"        - {clash_yaml_scalar(hv)}")
+            if pcfg.get("exclude-filter"):
+                L.append(f"    exclude-filter: {clash_yaml_scalar(pcfg['exclude-filter'])}")
+            if pcfg.get("filter"):
+                L.append(f"    filter: {clash_yaml_scalar(pcfg['filter'])}")
+            hc = pcfg.get("health-check")
+            if isinstance(hc, dict):
+                L.append("    health-check:")
+                if "enable" in hc:
+                    L.append(f"      enable: {'true' if hc['enable'] else 'false'}")
+                if hc.get("url"):
+                    L.append(f"      url: {clash_yaml_scalar(hc['url'])}")
+                if "interval" in hc:
+                    L.append(f"      interval: {hc['interval']}")
+                if "timeout" in hc:
+                    L.append(f"      timeout: {hc['timeout']}")
+                if "lazy" in hc:
+                    L.append(f"      lazy: {'true' if hc['lazy'] else 'false'}")
+        L.append("")
+
     # 策略组：成员只保留「真实存在的节点 + 已定义的组 + DIRECT」。
     # 之前只允许节点名，结果把 🇸🇬/🇺🇸 这两个容灾组整个过滤掉了 ——
     # Claude 的成员里少了它，等于容灾链断了。
     fallback_names = [fg["name"] for fg in config.get("fallback_groups", [])]
+    provider_group_names = [pg["name"] for pg in provider_groups if pg.get("name")]
     policy_names = [p["name"] for p in config.get("policies", []) if p.get("type") == "select"]
-    allowed = set(names) | set(fallback_names) | set(policy_names) | {"DIRECT", "REJECT"}
+    allowed = set(names) | set(fallback_names) | set(provider_group_names) | set(policy_names) | {"DIRECT", "REJECT"}
 
     def members_for(p, self_name):
         out = []
@@ -2410,11 +2450,37 @@ def generate_personal_clash_config(config, rule_data):
                 continue
             if m in allowed and m not in out:
                 out.append(m)
+        for m in inject_into_policies.get(p["name"], []) or []:
+            if m == self_name:
+                continue
+            if m in allowed and m not in out:
+                out.append(m)
         if "DIRECT" not in out:
             out.append("DIRECT")        # 节点全挂时至少还能上网
         return out
 
     L.append("proxy-groups:")
+    for pg in provider_groups:
+        if not pg.get("name"):
+            continue
+        L.append(f"  - name: {clash_yaml_scalar(pg['name'])}")
+        L.append(f"    type: {pg.get('type', 'select')}")
+        if pg.get("url"):
+            L.append(f"    url: {clash_yaml_scalar(pg['url'])}")
+        if "interval" in pg:
+            L.append(f"    interval: {pg['interval']}")
+        if "tolerance" in pg:
+            L.append(f"    tolerance: {pg['tolerance']}")
+        if "lazy" in pg:
+            L.append(f"    lazy: {'true' if pg['lazy'] else 'false'}")
+        if pg.get("exclude-filter"):
+            L.append(f"    exclude-filter: {clash_yaml_scalar(pg['exclude-filter'])}")
+        if pg.get("filter"):
+            L.append(f"    filter: {clash_yaml_scalar(pg['filter'])}")
+        if pg.get("use"):
+            L.append("    use:")
+            for u in pg["use"]:
+                L.append(f"      - {clash_yaml_scalar(u)}")
     for fg in config.get("fallback_groups", []):
         members = [m for m in fg.get("proxies", []) if m in names]
         if not members:
@@ -2472,7 +2538,19 @@ def generate_personal_clash_config(config, rule_data):
         if _n["server"] not in seen_servers:
             seen_servers.append(_n["server"])
             L.append(f"  - IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
-    L.append("  - DOMAIN,cctv.lifehackers.cc,DIRECT")
+    emitted_local_rules = set()
+    def _emit_direct_rule(rule_str):
+        if rule_str not in emitted_local_rules:
+            emitted_local_rules.add(rule_str)
+            L.append(f"  - {rule_str}")
+    for d in direct_domains:
+        if d:
+            _emit_direct_rule(f"DOMAIN,{d},DIRECT")
+    _emit_direct_rule("DOMAIN,cctv.lifehackers.cc,DIRECT")
+    for lr in CFG_SURGE_LOCAL.get("local_rules", []) or []:
+        lr_s = str(lr).strip()
+        if lr_s.startswith(("DOMAIN,", "DOMAIN-SUFFIX,")):
+            _emit_direct_rule(lr_s)
     # 与 Surge 侧一致：process_platforms 声明「这条进程规则只在哪些端有效」。
     # macOS 上 WorkBuddy 两个客户端的可执行文件都叫 Electron，Clash 的 PROCESS-NAME
     # 同样匹配不到，写出来只是死规则 —— 这类必须按端过滤。
@@ -2482,7 +2560,7 @@ def generate_personal_clash_config(config, rule_data):
             continue
         for proc in r.get("process", []):
             L.append(f"  - PROCESS-NAME,{proc},{r['target']}")
-    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 需 Oracle 出口，见 config 规则组）
+    # sharewithyou.dpdns.org 不再硬编码 DIRECT：由 rules/proxy.txt 走代理（VsTV 走默认新加坡代理出口，见 config 规则组）
     for r in config["rule_sources"]:
         if r.get("type") == "GEOIP":
             L.append(f"  - GEOIP,{r.get('country', 'CN')},{r['target']}")
