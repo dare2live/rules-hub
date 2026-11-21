@@ -1,0 +1,9 @@
+# Claude & Anthropic 全生态 (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,claude.ai,Claude
+HOST-SUFFIX,claude.com,Claude
+HOST-SUFFIX,clau.de,Claude
+HOST-SUFFIX,claudeusercontent.com,Claude
+HOST-SUFFIX,anthropic.com,Claude
+HOST,cdn.usefathom.com,Claude

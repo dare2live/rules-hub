@@ -1,0 +1,19 @@
+# WorkBuddy 国内版（腾讯云北京、广州），直连 (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,workbuddy.cn,WorkBuddy
+HOST-SUFFIX,codebuddy.cn,WorkBuddy
+HOST-SUFFIX,codebuddy.work,WorkBuddy
+HOST-SUFFIX,codebuddy.woa.com,WorkBuddy
+HOST-SUFFIX,copilot.tencent.com,WorkBuddy
+HOST-SUFFIX,staging-codebuddy.tencent.com,WorkBuddy
+HOST-SUFFIX,genie.tencent.com,WorkBuddy
+HOST-SUFFIX,cos.ap-beijing.myqcloud.com,WorkBuddy
+HOST-SUFFIX,cos.ap-guangzhou.myqcloud.com,WorkBuddy
+HOST-SUFFIX,cos.accelerate.myqcloud.com,WorkBuddy
+HOST-SUFFIX,tencentid.com,WorkBuddy
+HOST-SUFFIX,account.tencent.com,WorkBuddy
+HOST-SUFFIX,identity.tencent.com,WorkBuddy
+HOST-SUFFIX,tencentcs.com,WorkBuddy
+HOST-SUFFIX,tencentbuddy.com,WorkBuddy
+HOST-SUFFIX,tencentmaas.com,WorkBuddy
