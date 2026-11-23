@@ -5,10 +5,8 @@ description: Rules Hub 多端代理规则编译与分发项目的操作规范与
 
 # Rules Hub 操作规范
 
-> 这份文件在两处各有一份，内容必须一致：
-> 项目级 `/Users/dp/Documents/M/Rules/.workbuddy/skills/rules-hub/SKILL.md`（入库，是源头）
-> 和用户级 `~/.workbuddy/skills/rules-hub/SKILL.md`（保证任何会话都能加载）。
-> 改了这边，记得 `cp` 过去。
+> 本文件单一真相源为项目级 `/Users/dp/Documents/M/BASE/Rules/.agents/skills/rules-hub/SKILL.md`（入库）。
+> 已从 `.workbuddy/skills/rules-hub/` 迁移至此；不再同步复制到 `~/.workbuddy/skills/rules-hub/`。
 
 单一数据源：`config.yaml` + `rules/*.txt` + `config/*.yaml` + `web/` `templates/` 模板，
 由 `generator/build.py` 编译出六端产物。**改源头，不要改产物。**
@@ -24,7 +22,6 @@ python3 scripts/publish_private.py --show    # 忘了口令
 python3 scripts/publish_private.py --rotate  # 口令泄露
 /usr/bin/python3 scripts/upstream_audit.py   # P0 上游健康审计（只读）：写 data/audit + docs/UPSTREAM_AUDIT_*.md
 /usr/bin/python3 scripts/rules_lint.py       # 规则体检：推演 dist 里真正下发的规则，找「写了但不生效」的
-cp .workbuddy/skills/rules-hub/SKILL.md ~/.workbuddy/skills/rules-hub/  # 改了本文件必须同步，否则下次会话加载不到
 ```
 
 改了规则：commit + push，CI 每天北京 04:00 自动构建，设备端自己拉。
