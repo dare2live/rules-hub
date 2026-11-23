@@ -17,8 +17,8 @@ router:
   cron: "10 4 * * 0"
   # chnroute / gfwlist / cdn 上游数据刷新周期（天），编译时超过该天数会重新拉取
   data_refresh_days: 7
-  # 是否同步 cdn.txt（国内 CDN 域名，约 11 万条）。若路由器 DNS 变慢可置为 false
-  update_cdn: true
+  # 是否同步 cdn.txt（国内 CDN 域名，约 11 万条）。已卸载至 Mac mini AdGuard Home，置为 false
+  update_cdn: false
 
 # 1. 核心业务策略组定义（全端统一收敛至固定几个黄金策略组）
 policies:
@@ -52,6 +52,7 @@ policies:
     default_select: "Google Oregon"
     proxies:
       - "Google Oregon"
+      - "Google Oregon HY2"
       - "Oracle San Jose"
       - "🇺🇸 美国自动优选"
       - "🇸🇬 新加坡自动备用"
@@ -67,6 +68,7 @@ policies:
     default_select: "Google Oregon"
     proxies:
       - "Google Oregon"
+      - "Google Oregon HY2"
       - "Oracle San Jose"
       - "🇺🇸 美国自动优选"
       - "🇸🇬 新加坡自动备用"
@@ -106,29 +108,34 @@ policies:
 
   - name: "Proxy"
     type: "select"
-    desc: "全球通用外网加速（X、GitHub、Google 搜索），跟随主 Proxy（新加坡优先）"
+    desc: "全球通用外网加速（X、GitHub、Google 搜索），新加坡 HY2 优先、SS 自动兜底"
     qx_default: "proxy"
-    default_select: "Lightsail Singapore"
+    default_select: "🇸🇬 新加坡自动备用"
     proxies:
       - "Lightsail Singapore"
       - "Oracle San Jose"
+      - "Oracle San Jose HY2"
       - "Google Oregon"
+      - "Google Oregon HY2"
       - "Lightsail Singapore HY2"
       - "🇸🇬 新加坡自动备用"
+      - "🇺🇸 圣何塞自动备用"
       - "🇺🇸 美国自动优选"
       - "DIRECT"
 
   - name: "Media"
     type: "select"
-    desc: "国际流媒体（YouTube、Netflix、Spotify），跟随主 Proxy（新加坡优先）"
-    qx_default: "proxy"
-    default_select: "Lightsail Singapore"
+    desc: "国际流媒体（YouTube、Netflix、Spotify），走免费 10TB Oracle 圣何塞（HY2 优先）保新加坡 1TB 额度"
+    qx_default: "Oracle San Jose"
+    default_select: "🇺🇸 圣何塞自动备用"
     proxies:
       - "Lightsail Singapore"
       - "Oracle San Jose"
+      - "Oracle San Jose HY2"
       - "Google Oregon"
       - "Lightsail Singapore HY2"
       - "🇸🇬 新加坡自动备用"
+      - "🇺🇸 圣何塞自动备用"
       - "🇺🇸 美国自动优选"
       - "Proxy"
       - "DIRECT"
@@ -147,6 +154,15 @@ fallback_groups:
     proxies:
       - "Lightsail Singapore HY2"
       - "Lightsail Singapore"
+
+  - name: "🇺🇸 圣何塞自动备用"
+    type: "fallback"
+    test_url: "http://cp.cloudflare.com/generate_204"
+    interval: 180
+    tolerance: 50
+    proxies:
+      - "Oracle San Jose HY2"
+      - "Oracle San Jose"
 
   - name: "🇺🇸 美国自动优选"
     type: "url-test"

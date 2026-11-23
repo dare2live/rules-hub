@@ -83,7 +83,9 @@ general:
 proxy_slots:
   - Lightsail Singapore HY2
   - Lightsail Singapore
+  - Oracle San Jose HY2
   - Oracle San Jose
+  - Google Oregon HY2
   - Google Oregon
 
 # 远程规则集的自动更新间隔（秒）

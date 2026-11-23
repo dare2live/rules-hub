@@ -2122,8 +2122,10 @@ def _render_clash_example_yaml(config, provider_ids):
     # 占位节点：必须真实存在，否则 proxy-groups 引用会校验失败
     L.append("# 占位节点：换成自己的，或改用下面的 proxy-providers")
     L.append("proxies:")
-    for name in ("Lightsail Singapore HY2", "Lightsail Singapore",
-                 "Oracle San Jose", "Google Oregon"):
+    for name in (CFG_SURGE.get("proxy_slots") or
+                 ["Lightsail Singapore HY2", "Lightsail Singapore",
+                  "Oracle San Jose HY2", "Oracle San Jose",
+                  "Google Oregon HY2", "Google Oregon"]):
         L.append(f"  - name: {clash_yaml_scalar(name)}")
         L.append("    type: ss")
         L.append("    server: 127.0.0.1")

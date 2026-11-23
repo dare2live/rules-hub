@@ -95,8 +95,16 @@ if [ "$changed" = "1" ]; then
       fi
     done
     sh /koolshare/ss/ssconfig.sh restart >/dev/null 2>&1
+    if [ -x /jffs/scripts/nat-start ]; then
+      sh /jffs/scripts/nat-start >/dev/null 2>&1 || true
+      log "已回滚并重新应用 /jffs/scripts/nat-start"
+    fi
     log "已回滚并重启，请检查 /tmp/ruleshub_sync.log"
   else
+    if [ -x /jffs/scripts/nat-start ]; then
+      sh /jffs/scripts/nat-start >/dev/null 2>&1 || true
+      log "已重新应用 /jffs/scripts/nat-start 定制规则"
+    fi
     log "重启完成，dnsmasq 正常"
   fi
 else
