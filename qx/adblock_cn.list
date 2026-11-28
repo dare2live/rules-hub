@@ -1,0 +1,18 @@
+# 国产广告联盟 / 广告 SDK / 监测（小蚁摄像机实测，排在业务直连之前才生效） (Quantumult X)
+# Source: Rules Hub
+
+HOST-SUFFIX,fancyapi.com,reject
+HOST-SUFFIX,fancysdsp.com,reject
+HOST-SUFFIX,dmrtb.com,reject
+HOST-SUFFIX,66mobi.com,reject
+HOST-SUFFIX,leadmoad.com,reject
+HOST-SUFFIX,xiawan8.com,reject
+HOST-SUFFIX,medproad.com,reject
+HOST-SUFFIX,ydmob.com,reject
+HOST-SUFFIX,adprod.cn,reject
+HOST-SUFFIX,divms.cn,reject
+HOST,mi.gdt.qq.com,reject
+HOST-SUFFIX,mobads.baidu.com,reject
+HOST,g.cn.miaozhen.com,reject
+HOST,t.dentsuchina.cn,reject
+HOST-SUFFIX,zhangyuyidong.cn,reject

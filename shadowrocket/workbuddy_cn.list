@@ -1,0 +1,18 @@
+# WorkBuddy 国内版（腾讯云北京、广州），直连 (Shadowrocket)
+
+DOMAIN-SUFFIX,workbuddy.cn
+DOMAIN-SUFFIX,codebuddy.cn
+DOMAIN-SUFFIX,codebuddy.work
+DOMAIN-SUFFIX,codebuddy.woa.com
+DOMAIN-SUFFIX,copilot.tencent.com
+DOMAIN-SUFFIX,staging-codebuddy.tencent.com
+DOMAIN-SUFFIX,genie.tencent.com
+DOMAIN-SUFFIX,cos.ap-beijing.myqcloud.com
+DOMAIN-SUFFIX,cos.ap-guangzhou.myqcloud.com
+DOMAIN-SUFFIX,cos.accelerate.myqcloud.com
+DOMAIN-SUFFIX,tencentid.com
+DOMAIN-SUFFIX,account.tencent.com
+DOMAIN-SUFFIX,identity.tencent.com
+DOMAIN-SUFFIX,tencentcs.com
+DOMAIN-SUFFIX,tencentbuddy.com
+DOMAIN-SUFFIX,tencentmaas.com
