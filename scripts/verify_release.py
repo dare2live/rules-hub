@@ -112,6 +112,7 @@ def enumerate_resources(cfg):
     #    但记录 hash 用于版本对齐与「两步生效」提示。
     for key, rel in (
         ("body/qx.conf", "QuantumultX_Personal.conf"),
+        ("body/shadowrocket.conf", "Shadowrocket_Personal.conf"),
         ("body/clash.yaml", "Clash_Personal.yaml"),
     ):
         add(key, ROOT / rel, "workers.dev/<token>/%s" % key.split("/")[1],

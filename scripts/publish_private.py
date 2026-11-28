@@ -57,10 +57,12 @@ SURGE_PROFILE = (
 # (KV key, 对外文件名, 本地文件, 说明, 是否必须存在)
 UPLOADS = [
     ("qx", "qx.conf", BASE_DIR / "QuantumultX_Personal.conf", "Quantumult X 完整配置", True),
+    ("shadowrocket", "shadowrocket.conf", BASE_DIR / "Shadowrocket_Personal.conf", "Shadowrocket 完整配置", True),
     ("clash", "clash.yaml", BASE_DIR / "Clash_Personal.yaml", "Clash / mihomo 完整配置", True),
     ("module", "module.conf", BASE_DIR / "dist" / "clash" / "module.conf", "Clash 模块 · 全量重写与 MITM (QX 同源)", False),
     ("nodes-clash", "nodes.yaml", PRIVATE_DIR / "nodes.yaml", "节点订阅 · Clash provider", False),
     ("nodes-qx", "nodes.txt", PRIVATE_DIR / "nodes.txt", "节点订阅 · 通用 base64", False),
+    ("nodes-sr", "nodes-sr.txt", PRIVATE_DIR / "nodes-sr.txt", "节点订阅 · Shadowrocket 全协议 (HY2+SS)", False),
     ("surge", "surge.conf", SURGE_PROFILE, "Surge 完整配置", False),
 ]
 

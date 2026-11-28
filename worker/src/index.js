@@ -7,9 +7,10 @@
  *   用一个不可枚举的随机路径当"密码"，设备端只认这个 URL。
  *
  * 路由：
- *   GET /<token>/                 -> 链接清单页（方便复制到 QX / Clash）
+ *   GET /<token>/                 -> 链接清单页（方便复制到 QX / Shadowrocket / Clash）
  *   GET /<token>/clash.yaml       -> mihomo / Clash 配置
  *   GET /<token>/qx.conf          -> Quantumult X 配置
+ *   GET /<token>/shadowrocket.conf -> Shadowrocket 配置
  *   GET /<token>/surge.conf       -> Surge 配置（未上传则 404）
  *   其它一切                      -> 404
  */
@@ -20,9 +21,12 @@ const FILES = {
   "module.conf": { key: "module", type: "text/plain; charset=utf-8", label: "Clash 模块 · 全量重写与 MITM (QX 同源)" },
   "qx.conf": { key: "qx", type: "text/plain; charset=utf-8", label: "Quantumult X 完整配置" },
   "quantumultx.conf": { key: "qx", type: "text/plain; charset=utf-8", label: "Quantumult X 完整配置" },
+  "shadowrocket.conf": { key: "shadowrocket", type: "text/plain; charset=utf-8", label: "Shadowrocket 完整配置" },
+  "sr.conf": { key: "shadowrocket", type: "text/plain; charset=utf-8", label: "Shadowrocket 完整配置" },
   "surge.conf": { key: "surge", type: "text/plain; charset=utf-8", label: "Surge 完整配置" },
   "nodes.yaml": { key: "nodes-clash", type: "text/yaml; charset=utf-8", label: "节点订阅 · Clash provider" },
   "nodes.txt": { key: "nodes-qx", type: "text/plain; charset=utf-8", label: "节点订阅 · 通用 base64" },
+  "nodes-sr.txt": { key: "nodes-sr", type: "text/plain; charset=utf-8", label: "节点订阅 · Shadowrocket 全协议 (HY2+SS)" },
 };
 
 const NO_STORE = {

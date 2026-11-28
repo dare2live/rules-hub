@@ -1924,17 +1924,254 @@ def build_router(config, rule_data):
     print(f"   ✅ [Router] chnroute {len(chnroute)} / gfwlist {len(merged)} / cdn {len(cdn)} / 订阅脚本已生成")
 
 
+SR_NAME_MAP = {
+    "DIRECT": "DIRECT",
+    "REJECT": "REJECT",
+    "Proxy": "全球加速",
+    "Media": "国际媒体",
+}
+
+SR_POLICY_ORDER = [
+    "Proxy",
+    "Media",
+    "Claude",
+    "GoogleAI",
+    "OpenAI",
+    "WorkBuddy",
+    "WorkBuddy AI",
+]
+
+
+def _sr_policy_name(name):
+    return SR_NAME_MAP.get(name, name)
+
+
+def _sr_node_regex(node_names):
+    return "^(" + "|".join(re.escape(n) for n in node_names) + ")$"
+
+
+def _build_shadowrocket_conf(config, rule_data, personal=False):
+    """构建 Shadowrocket 原生 .conf 配置（脱敏模板与个人私有配置同源）。"""
+    from datetime import datetime, timezone, timedelta
+
+    base_url = config["meta"]["base_url"]
+    tz_bj = timezone(timedelta(hours=8))
+    gen_time = datetime.now(tz_bj).strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = []
+    if personal:
+        lines.append("# ===== Rules Hub — Shadowrocket 个人完整配置（含私有直连，请勿提交到仓库）=====")
+        lines.append(f"# 生成时间: {gen_time} (北京时间)")
+        lines.append(f"# 规则远程托管: {base_url}/shadowrocket/ （每日自动更新）")
+        lines.append("# 请在首页订阅全协议节点 (nodes-sr.txt)，并将全局路由设为「配置」。")
+    else:
+        lines.append("# ===== Rules Hub Managed Profile for Shadowrocket =====")
+        lines.append(f"# Author: {config['meta']['author']}")
+        lines.append("# 提示：此配置为安全脱敏模板，绝不包含任何私密节点 IP 或口令。")
+        lines.append("# 请先导入节点订阅，并在首页将全局路由设为「配置」。")
+    lines.append("")
+
+    always_real_ip = (
+        "*.msftncsi.com, *.msftconnecttest.com, *.srv.nintendo.net, *.stun.playstation.net, "
+        "xbox.*.microsoft.com, *.xboxlive.com, *.battlenet.com.cn, *.battlenet.com, "
+        "*.blzstatic.cn, *.battle.net, *.turn.twilio.com, *.stun.twilio.com, "
+        "stun.syncthing.net, stun.*"
+    )
+    if personal:
+        always_real_ip += ", cctv.lifehackers.cc"
+
+    lines.extend([
+        "[General]",
+        "bypass-system = true",
+        "skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, localhost, *.local, captive.apple.com",
+        "tun-excluded-routes = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 255.255.255.255/32",
+        "dns-server = https://dns.alidns.com/dns-query, https://doh.pub/dns-query",
+        "fallback-dns-server = 223.5.5.5, 119.29.29.29",
+        "ipv6 = false",
+        "prefer-ipv6 = false",
+        "dns-direct-system = false",
+        "dns-direct-fallback-proxy = true",
+        "private-ip-answer = true",
+        "icmp-auto-reply = true",
+        "hijack-dns = :53",
+        f"always-real-ip = {always_real_ip}",
+        "udp-policy-not-supported-behaviour = REJECT",
+        "always-reject-url-rewrite = false",
+        "",
+        "[Proxy Group]",
+    ])
+
+    fallback_groups = config.get("fallback_groups", [])
+    fallback_names = set()
+    node_to_fallback = {}
+    for fg in fallback_groups:
+        g_name = fg["name"]
+        g_type = fg.get("type", "fallback")
+        fg_nodes = fg.get("proxies", [])
+        fallback_names.add(g_name)
+        for n in fg_nodes:
+            node_to_fallback.setdefault(n, g_name)
+        interval = fg.get("interval", 180)
+        params = [
+            f"{g_name} = {g_type}",
+            "url=http://cp.cloudflare.com/generate_204",
+            f"interval={interval}",
+            "timeout=5",
+        ]
+        if g_type == "url-test":
+            params.append(f"tolerance={fg.get('tolerance', 50)}")
+        params.append("select=0")
+        if fg_nodes:
+            params.append(f"policy-regex-filter={_sr_node_regex(fg_nodes)}")
+        lines.append(", ".join(params))
+
+    lines.append("")
+    policies_by_name = {
+        p["name"]: p for p in config.get("policies", []) if p.get("type") == "select"
+    }
+    for key in SR_POLICY_ORDER:
+        p = policies_by_name.get(key)
+        if not p:
+            continue
+        sr_name = _sr_policy_name(key)
+        positional = []
+        node_members = []
+        for m in p.get("proxies", []):
+            if m == key:
+                continue
+            if m in fallback_names or m in policies_by_name or m in ("DIRECT", "REJECT", "PROXY"):
+                mm = _sr_policy_name(m)
+                if mm != sr_name and mm not in positional:
+                    positional.append(mm)
+            else:
+                if m not in node_members:
+                    node_members.append(m)
+        for builtin in ("全球加速", "PROXY", "DIRECT"):
+            if builtin != sr_name and builtin not in positional:
+                positional.append(builtin)
+
+        default_select = p.get("default_select")
+        ds_mapped = _sr_policy_name(default_select) if default_select else None
+        policy_select_param = None
+        if ds_mapped and ds_mapped != sr_name and ds_mapped in positional:
+            positional.remove(ds_mapped)
+            positional.insert(0, ds_mapped)
+        elif default_select and default_select in node_members:
+            fb = node_to_fallback.get(default_select)
+            if fb and fb in positional:
+                positional.remove(fb)
+                positional.insert(0, fb)
+            policy_select_param = default_select
+
+        parts = [f"{sr_name} = select"] + positional
+        if node_members:
+            parts.append(f"policy-regex-filter={_sr_node_regex(node_members)}")
+        if policy_select_param:
+            parts.append(f"policy-select-name={policy_select_param}")
+        parts.append("select=0")
+        lines.append(", ".join(parts))
+
+    lines.extend(["", "[Rule]"])
+    for cidr in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "169.254.0.0/16",
+    ):
+        lines.append(f"IP-CIDR,{cidr},DIRECT,no-resolve")
+    lines.append("IP-CIDR6,fc00::/7,DIRECT,no-resolve")
+    lines.append("IP-CIDR6,fe80::/10,DIRECT,no-resolve")
+
+    if personal:
+        emitted_local = set()
+
+        def _emit_local(rule_str):
+            if rule_str not in emitted_local:
+                emitted_local.add(rule_str)
+                lines.append(rule_str)
+
+        nodes = parse_nodes_for_clash()
+        for _n in nodes:
+            _emit_local(f"IP-CIDR,{_n['server']}/32,DIRECT,no-resolve")
+
+        priv_path = BASE_DIR / ".private" / "clash_providers.yaml"
+        priv_clash = _load_yaml(priv_path) if priv_path.exists() else {}
+        for d in priv_clash.get("direct_domains", []) or []:
+            if d:
+                _emit_local(f"DOMAIN,{d},DIRECT")
+        _emit_local("DOMAIN,cctv.lifehackers.cc,DIRECT")
+        for lr in CFG_SURGE_LOCAL.get("local_rules", []) or []:
+            lr_s = str(lr).strip()
+            if lr_s.startswith(("DOMAIN,", "DOMAIN-SUFFIX,")):
+                _emit_local(lr_s)
+
+        for raw in read_rule_file("rules/unbreak.txt"):
+            norm = normalize_rule(raw)
+            if not norm:
+                continue
+            parts = [pt.strip() for pt in norm.split(",")]
+            rtype = parts[0].upper() if parts else ""
+            if rtype in ("IP-CIDR", "IP-CIDR6") and len(parts) >= 2:
+                _emit_local(f"{rtype},{parts[1]},DIRECT,no-resolve")
+            elif rtype in ("DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "USER-AGENT") and len(parts) >= 2:
+                _emit_local(f"{rtype},{parts[1]},DIRECT")
+
+    lines.append("")
+    for r in config["rule_sources"]:
+        rule_id = r["id"]
+        target = _sr_policy_name(r.get("target"))
+        r_type = r.get("type")
+        if r_type == "GEOIP":
+            lines.append(f"GEOIP,{r.get('country', 'CN')},{target}")
+        elif r_type == "FINAL":
+            lines.append(f"FINAL,{target},dns-failed")
+        elif "file" in r:
+            lines.append(f"RULE-SET,{base_url}/shadowrocket/{rule_id}.list,{target}")
+
+    lines.extend([
+        "",
+        "[URL Rewrite]",
+        r"^https?://(www\.)?(g|google)\.cn https://www.google.com 302",
+        "",
+    ])
+    return "\n".join(lines)
+
+
 def build_shadowrocket(config, rule_data):
     ROCKET_DIST.mkdir(parents=True, exist_ok=True)
-    # Shadowrocket directly supports Surge list format
+    # Shadowrocket directly supports Surge list format (without macOS PROCESS-NAME)
+    list_count = 0
     for r in config["rule_sources"]:
         rule_id = r["id"]
         if "file" in r:
-            lines = rule_data.get(r["file"], [])
+            lines = [
+                ln for ln in rule_data.get(r["file"], [])
+                if not ln.upper().startswith("PROCESS-NAME,")
+            ]
             list_content = [f"# {r.get('desc', rule_id)} (Shadowrocket)", ""]
             list_content.extend(lines)
-            with open(ROCKET_DIST / f"{rule_id}.list", "w", encoding="utf-8") as f:
-                f.write("\n".join(list_content) + "\n")
+            write_text(ROCKET_DIST / f"{rule_id}.list", "\n".join(list_content) + "\n")
+            list_count += 1
+
+    conf_text = _build_shadowrocket_conf(config, rule_data, personal=False)
+    write_text(ROCKET_DIST / "profile.conf", conf_text)
+    print(f"   ✅ [Shadowrocket] {list_count} 个规则集 / profile.conf 模板已生成")
+
+
+def generate_personal_shadowrocket_config(config, rule_data):
+    """生成本机及 KV 分发用的 Shadowrocket 个人完整配置（gitignored）。"""
+    conf_text = _build_shadowrocket_conf(config, rule_data, personal=True)
+    for required_tok in ("[General]", "[Proxy Group]", "[Rule]", "FINAL,"):
+        if required_tok not in conf_text:
+            raise ValueError(f"Shadowrocket 个人配置缺少必要段落/规则: {required_tok}")
+    if "update-interval=" in conf_text:
+        raise ValueError("Shadowrocket 配置不应包含 update-interval= 参数")
+    out = BASE_DIR / "Shadowrocket_Personal.conf"
+    write_text(out, conf_text)
+    print(f"   🔒 [Shadowrocket] 个人配置已生成: {out}")
+    return out
 
 
 # ===== Clash (mihomo) =====
@@ -2644,7 +2881,13 @@ def build_private_node_subs():
     blob = base64.b64encode("\n".join(uris).encode()).decode()
     (PRIVATE_DIR / "nodes.txt").write_text(blob + "\n", encoding="utf-8")
 
-    print(f"   🔒 [私有] 节点订阅已生成: .private/nodes.yaml + nodes.txt（{len(uris)} 个节点）")
+    # 3) Shadowrocket 全协议节点订阅（HY2 排在 SS 之前，使 fallback 组默认优先走 HY2）
+    sr_nodes = sorted(nodes, key=lambda n: 0 if n.get("type") == "hysteria2" else 1)
+    sr_uris = [u for u in (_node_to_uri(n) for n in sr_nodes) if u]
+    sr_blob = base64.b64encode("\n".join(sr_uris).encode()).decode()
+    (PRIVATE_DIR / "nodes-sr.txt").write_text(sr_blob + "\n", encoding="utf-8")
+
+    print(f"   🔒 [私有] 节点订阅已生成: .private/nodes.yaml + nodes.txt（{len(uris)} 个）+ nodes-sr.txt（{len(sr_uris)} 个）")
 
 
 def private_base_url():
@@ -2883,8 +3126,9 @@ def main():
     build_qx(config, rule_data, produced)
     generate_personal_qx_config(config, produced)
     
-    print("🔨 Generating Shadowrocket rulesets...")
+    print("🔨 Generating Shadowrocket configuration and rulesets...")
     build_shadowrocket(config, rule_data)
+    generate_personal_shadowrocket_config(config, rule_data)
 
     print("🔨 Generating Clash (mihomo) rulesets...")
     build_clash(config, rule_data)

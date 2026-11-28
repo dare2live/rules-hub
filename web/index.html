@@ -388,10 +388,10 @@
             <span class="card-icon">🚀</span>
             <div class="card-title">Shadowrocket (iOS)</div>
           </div>
-          <p class="card-desc">小火箭远程规则集订阅，完美兼容 Hysteria 2 与 Shadowsocks 多协议节点。</p>
+          <p class="card-desc">完整远程配置模板（同源策略组 + 13 路分流规则集），兼容 Hysteria 2 与 Shadowsocks 多协议节点。<br><span style="color: var(--warning);">需先在首页订阅节点，日常请用上面的私有订阅。</span></p>
         </div>
-        <button class="copy-btn" onclick="copyLink('{{base_url}}/shadowrocket/claude.list')">
-          📋 复制小火箭规则集
+        <button class="copy-btn" onclick="copyLink('{{base_url}}/shadowrocket/profile.conf')">
+          📋 复制 Shadowrocket 规则模板（不含节点）
         </button>
       </div>
 
@@ -551,6 +551,7 @@
       setup.style.display = 'none';
       const items = [
         ['🎯 Quantumult X', 'qx.conf', 'var(--accent)'],
+        ['🚀 Shadowrocket', 'shadowrocket.conf', 'var(--warning)'],
         ['🐱 Clash / mihomo', 'clash.yaml', 'var(--purple)'],
         ['⚡️ Surge', 'surge.conf', 'var(--success)'],
       ];
